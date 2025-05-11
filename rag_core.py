@@ -5,6 +5,7 @@ from databricks_langchain import DatabricksEmbeddings, ChatDatabricks
 from langchain.schema import SystemMessage, HumanMessage
 import urllib.request
 import os
+from sklearn.preprocessing import normalize
 
 # === Configuration ===
 
