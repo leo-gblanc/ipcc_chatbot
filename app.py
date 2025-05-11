@@ -134,7 +134,6 @@ with col1:
         if user_input and user_input.strip():
             st.session_state.current_question = user_input.strip()
             st.session_state.chat_history.append((user_input.strip(), ""))
-            st.session_state.user_input = ""
             st.rerun()
 
         # Generate answer if needed
