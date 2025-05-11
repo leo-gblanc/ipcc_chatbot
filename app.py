@@ -1,6 +1,6 @@
 import streamlit as st
 import time
-from rag_core import load_faiss_resources, generate_answer  # Your backend code
+from rag_core import load_faiss_resources, generate_answer  # Your RAG backend logic
 
 # === Load FAISS and metadata once ===
 if "faiss_index" not in st.session_state:
@@ -10,7 +10,7 @@ if "faiss_index" not in st.session_state:
     st.session_state.chunk_id_to_info = chunk_id_to_info
 
 # --- Set page configuration ---
-st.set_page_config(page_title="IPCC Assistant", page_icon="💬")
+st.set_page_config(page_title="IPCC Assistant", page_icon="💬", layout="wide")
 
 # --- Custom CSS ---
 st.markdown(
@@ -57,9 +57,11 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- Initialize chat history ---
+# --- Initialize session state ---
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+if "last_sources" not in st.session_state:
+    st.session_state.last_sources = []
 
 # --- Header ---
 st.markdown(
@@ -73,31 +75,18 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- Render chat history ---
-for user_msg, assistant_msg in st.session_state.chat_history:
-    st.markdown(f"""
-        <div class="chat-row user-row">
-            <div class="chat-bubble user-bubble">{user_msg}</div>
-        </div>
-        <div class="chat-row bot-row">
-            <div class="chat-bubble bot-bubble">{assistant_msg}</div>
-        </div>
-    """, unsafe_allow_html=True)
-
 # --- Chat input ---
 question = st.chat_input("Ask something about climate reports...")
 
-# --- On message sent ---
+# === On question submit ===
 if question and question.strip():
-    # Save user message with empty bot placeholder
-    st.session_state.chat_history.append((question, ""))
+    st.session_state.chat_history.append((question, ""))  # Save question with empty answer
     st.rerun()
 
-# --- Generate answer if needed ---
+# === Handle answer generation ===
 if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "":
     question = st.session_state.chat_history[-1][0]
 
-    # Show thinking animation
     with st.spinner("Thinking..."):
         response = generate_answer(
             question,
@@ -106,7 +95,41 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "":
             st.session_state.chunk_id_to_info
         )
 
-    # Format the final response
-    answer_text = response["answer"]
-    st.session_state.chat_history[-1] = (question, answer_text)
+    # Save answer and sources
+    st.session_state.chat_history[-1] = (question, response["answer"])
+    st.session_state.last_sources = response["chunks"]
     st.rerun()
+
+# === Layout with chat on the left and sources on the right ===
+col1, col2 = st.columns([2, 1], gap="large")
+
+# --- Left: Chat bubbles ---
+with col1:
+    for user_msg, assistant_msg in st.session_state.chat_history:
+        st.markdown(f"""
+            <div class="chat-row user-row">
+                <div class="chat-bubble user-bubble">{user_msg}</div>
+            </div>
+            <div class="chat-row bot-row">
+                <div class="chat-bubble bot-bubble">{assistant_msg}</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+# --- Right: Sources used ---
+with col2:
+    st.markdown("### 🔎 Sources")
+    for i, chunk in enumerate(st.session_state.last_sources):
+        meta = chunk.get("metadata", {})
+        doc_title = meta.get("doc_title", "Unknown Document")
+        page = meta.get("page_number", "N/A")
+        score = meta.get("score", "N/A")
+        pdf_url = meta.get("pdf_url")
+
+        st.markdown(f"""
+        <div style="background-color: #fff; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 10px;">
+            <b>Doc {i+1} – {doc_title} – Page {page}</b><br>
+            <p style="font-size: 14px;">{chunk['text'][:500]}{'...' if len(chunk['text']) > 500 else ''}</p>
+            <p><i>Relevancy score: {score}</i></p>
+            {'🔗 [Open PDF](' + pdf_url + ')' if pdf_url else ''}
+        </div>
+        """, unsafe_allow_html=True)
