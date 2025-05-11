@@ -3,10 +3,26 @@ import faiss
 import numpy as np
 from databricks_langchain import DatabricksEmbeddings, ChatDatabricks
 from langchain.schema import SystemMessage, HumanMessage
+import urllib.request
+import os
 
 # === Configuration ===
-FAISS_INDEX_PATH = "/dbfs/FileStore/rag/ipcc_faiss.index"
-METADATA_PATH    = "/dbfs/FileStore/rag/ipcc_faiss_metadata.pkl"
+
+# Direct links to Google Drive
+FAISS_URL = "https://drive.google.com/uc?export=download&id=1xWcHgAKqUdHug5Eqec0MEE2MfyTVBoId"
+META_URL  = "https://drive.google.com/uc?export=download&id=1DcG89F5hRGRs0Oe6YO4kB83Lq4rOsF3D"
+
+FAISS_INDEX_PATH = "/tmp/ipcc_faiss.index"
+METADATA_PATH    = "/tmp/ipcc_faiss_metadata.pkl"
+
+# Download once if not already here
+if not os.path.exists(FAISS_INDEX_PATH):
+    urllib.request.urlretrieve(FAISS_URL, FAISS_INDEX_PATH)
+    print("✅ FAISS index downloaded.")
+
+if not os.path.exists(METADATA_PATH):
+    urllib.request.urlretrieve(META_URL, METADATA_PATH)
+    print("✅ Metadata downloaded.")
 
 # === Load FAISS index and metadata ===
 def load_faiss_resources():
