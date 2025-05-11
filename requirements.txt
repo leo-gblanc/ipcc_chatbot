@@ -1,0 +1,5 @@
+streamlit
+langchain
+databricks-langchain
+faiss-cpu
+numpy
