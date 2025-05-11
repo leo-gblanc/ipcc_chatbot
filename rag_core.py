@@ -48,7 +48,8 @@ chat_model = ChatDatabricks(
 # === Search ===
 def faiss_similarity_search(query: str, index, chunk_ids, chunk_id_to_info, k: int = 5):
     query_vector = embedder.embed_query(query)
-    distances, indices = index.search(np.array([query_vector]).astype("float32"), k)
+    query_vector = normalize(np.array([query_vector]).astype("float32"), axis=1)
+    distances, indices = index.search(query_vector, k)
 
     results = []
     for rank, idx in enumerate(indices[0]):
