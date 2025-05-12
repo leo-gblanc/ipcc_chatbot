@@ -92,10 +92,11 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "":
             question,
             st.session_state.faiss_index,
             st.session_state.chunk_ids,
-            st.session_state.chunk_id_to_info
+            st.session_state.chunk_id_to_info,
+            k=5,
+            window=1  # Retrieve neighbors
         )
 
-    # Save answer and sources
     st.session_state.chat_history[-1] = (question, response["answer"])
     st.session_state.last_sources = response["chunks"]
     st.rerun()
@@ -121,15 +122,17 @@ with col2:
     for i, chunk in enumerate(st.session_state.last_sources):
         meta = chunk.get("metadata", {})
         page = meta.get("source", "")
+        report = meta.get("report_name", "Unknown Report")
         page_number = int(page.replace("page_", "")) if "page_" in page else "?"
-        similarity = round(chunk["distance"] * 100, 1)  # cosine similarity → percentage
+        similarity = round(chunk["distance"] * 100, 1)  # IndexFlatIP with normalized vectors
+
         pdf_url = f"https://www.ipcc.ch/report/ar6/wg3/downloads/report/IPCC_AR6_WGIII_FullReport.pdf#page={page_number}"
 
         st.markdown(f"""
         <div style="background-color: #f9f9f9; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 10px;">
-            <b>Doc {i+1} – IPCC_AR6_WGIII_FullReport – Page {page_number}</b><br>
+            <b>Doc {i+1} – {report} – Page {page_number}</b><br>
             <p style="font-size: 14px;">{chunk['text'][:500]}{'...' if len(chunk['text']) > 500 else ''}</p>
-            <p><i>Relevance score: {similarity}%</i></p>
+            <p><i>Similarity score: {similarity}%</i></p>
             🔗 <a href="{pdf_url}" target="_blank">Open PDF</a>
         </div>
         """, unsafe_allow_html=True)

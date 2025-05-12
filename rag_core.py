@@ -42,33 +42,49 @@ embedder = DatabricksEmbeddings(
 
 chat_model = ChatDatabricks(
     endpoint="databricks-claude-3-7-sonnet",
-    max_tokens=1024,
+    max_tokens=2048,
     temperature=0.1
 )
 
-# === Search ===
-def faiss_similarity_search(query: str, index, chunk_ids, chunk_id_to_info, k: int = 5):
+# === Search with adjacent-chunk retrieval ===
+def faiss_similarity_search_with_neighbors(query: str, index, chunk_ids, chunk_id_to_info, k: int = 5, window: int = 1):
     query_vector = embedder.embed_query(query)
-    query_vector = normalize(np.array([query_vector]).astype("float32"), axis=1)
+    query_vector = np.array([query_vector], dtype="float32")
+    faiss.normalize_L2(query_vector)
     distances, indices = index.search(query_vector, k)
 
+    selected_indices = set()
+    index_to_distance = {}
+
+    for rank, anchor_idx in enumerate(indices[0]):
+        if 0 <= anchor_idx < len(chunk_ids):
+            dist = distances[0][rank]
+            for offset in range(-window, window + 1):
+                neighbor_idx = anchor_idx + offset
+                if 0 <= neighbor_idx < len(chunk_ids):
+                    selected_indices.add(neighbor_idx)
+                    if neighbor_idx not in index_to_distance or dist < index_to_distance[neighbor_idx]:
+                        index_to_distance[neighbor_idx] = dist
+
+    sorted_indices = sorted(selected_indices)
+
     results = []
-    for rank, idx in enumerate(indices[0]):
-        dist = distances[0][rank]
+    for rank, idx in enumerate(sorted_indices):
         chunk_id = chunk_ids[idx]
         info = chunk_id_to_info[chunk_id]
         results.append({
             "rank": rank,
-            "distance": dist,
+            "distance": index_to_distance.get(idx),
             "chunk_id": chunk_id,
             "text": info["text"],
             "metadata": info.get("metadata", {})
         })
+
     return results
 
 # === LLM Answer ===
-def generate_answer(question: str, index, chunk_ids, chunk_id_to_info, k: int = 10):
-    hits = faiss_similarity_search(question, index, chunk_ids, chunk_id_to_info, k=k)
+def generate_answer(question: str, index, chunk_ids, chunk_id_to_info, k: int = 5, window: int = 1):
+    hits = faiss_similarity_search_with_neighbors(question, index, chunk_ids, chunk_id_to_info, k=k, window=window)
     context = "\n\n".join(h["text"] for h in hits)
 
     prompt = (
@@ -84,10 +100,10 @@ def generate_answer(question: str, index, chunk_ids, chunk_id_to_info, k: int = 
 Use only the provided context from official IPCC reports and related documents to answer the user's question. Do not invent information or cite external knowledge.
 
 When answering:
-- Provide clear, concise, and fact-based explanations.
+- Provide clear and fact-based explanations.
 - Focus especially on economic, regulatory, and resource-related aspects if relevant.
 - Cite specific data points, scenarios, or mechanisms if available in the context.
-- If the context does not contain a direct answer, say "The provided documents do not contain enough information to answer this question precisely."
+- If the context does not contain a direct answer, say \"The report does not contain enough information to answer this question precisely.\"
 
 Never assume facts outside the given documents, and do not speculate.
 
