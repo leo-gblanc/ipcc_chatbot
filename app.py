@@ -66,11 +66,7 @@ if "last_sources" not in st.session_state:
 # --- Header ---
 st.markdown(
     """
-    <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 2rem;">
-        <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ4mGN0EMyYSpmOiimWh8AwFitk5pUFAcKVLA&s" 
-             width="80" style="margin-right: 15px;">
-        <h1 style="margin: 0; font-size: 50px;">IPCC Assistant</h1>
-    </div>
+    <h1 style="text-align: center; font-size: 50px; margin-bottom: 2rem;">IPCC Assistant</h1>
     """,
     unsafe_allow_html=True
 )
