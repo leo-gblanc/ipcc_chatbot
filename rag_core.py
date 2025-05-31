@@ -82,8 +82,7 @@ def faiss_similarity_search_groups(query: str, index, chunk_ids, chunk_id_to_inf
                 group.append({
                     "chunk_id": chunk_id,
                     "text": info["text"],
-                    "metadata": info.get("metadata", {}),
-                    "faiss_similarity": round(1 - dist, 4)
+                    "metadata": info.get("metadata", {})
                 })
         if group:
             chunk_groups.append(group)
@@ -96,7 +95,11 @@ def rerank_chunk_groups(query, chunk_groups, top_n=5):
     with torch.no_grad():
         scores = rerank_model(**tokens).logits.squeeze(-1)
     top_indices = torch.topk(scores, k=min(top_n, len(chunk_groups))).indices.tolist()
-    return [chunk_groups[i] for i in top_indices]
+    top_groups = [chunk_groups[i] for i in top_indices]
+    for i, idx in enumerate(top_indices):
+        for chunk in top_groups[i]:
+            chunk["reranker_score"] = round(scores[idx].item(), 4)
+    return top_groups
 
 # === Generate answer ===
 def generate_answer(query: str, index, chunk_ids, chunk_id_to_info, k: int = 5, window: int = 1, rerank_top_n: int = 6):
@@ -117,13 +120,19 @@ def generate_answer(query: str, index, chunk_ids, chunk_id_to_info, k: int = 5, 
 
     top_groups = rerank_chunk_groups(query, all_groups, top_n=rerank_top_n)
     selected_chunks = [chunk for group in top_groups for chunk in group]
-    context_text = "\n\n".join(chunk["text"] for chunk in selected_chunks)
+
+    # Tag chunks with inline references [1], [2], ...
+    context_text = ""
+    for i, chunk in enumerate(selected_chunks):
+        ref = f"[{i+1}]"
+        chunk["reference"] = ref
+        context_text += f"{ref} {chunk['text']}\n\n"
 
     prompt = (
-        "Use the context below to answer the question precisely.\n\n"
+        "Use the numbered references in the context to cite where each fact comes from.\n\n"
         f"Context:\n{context_text}\n\n"
         f"Question: {query}\n\n"
-        "Provide a detailed answer:"
+        "Provide a detailed answer using inline references like [1], [2], etc. to indicate sources."
     )
 
     msgs = [

@@ -107,12 +107,19 @@ col1, col2 = st.columns([2, 1], gap="large")
 # --- Left: Chat display ---
 with col1:
     for user_msg, bot_msg in st.session_state.chat_history:
+        # Make inline refs like [1] clickable: [1](#ref1)
+        def linkify_refs(text):
+            import re
+            return re.sub(r"\[(\d+)\]", r"[\1](#ref\1)", text)
+
+        bot_msg_linked = linkify_refs(bot_msg)
+
         st.markdown(f"""
             <div class="chat-row user-row">
                 <div class="chat-bubble user-bubble">{user_msg}</div>
             </div>
             <div class="chat-row bot-row">
-                <div class="chat-bubble bot-bubble">{bot_msg}</div>
+                <div class="chat-bubble bot-bubble">{bot_msg_linked}</div>
             </div>
         """, unsafe_allow_html=True)
 
@@ -124,15 +131,18 @@ with col2:
         page = meta.get("source", "")
         report = meta.get("report_name", "Unknown Report")
         page_number = int(page.replace("page_", "")) if "page_" in page else "?"
-        sim = round(chunk.get("faiss_similarity", 0) * 100, 1)
+        score = chunk.get("reranker_score", 0.0)
+        rel = round((score + 10) * 5, 1)  # Rescaled for display: rough 0–100%
+        ref = chunk.get("reference", f"[{i+1}]")
 
         pdf_url = f"https://www.ipcc.ch/report/ar6/wg3/downloads/report/IPCC_AR6_WGIII_FullReport.pdf#page={page_number}"
 
         st.markdown(f"""
+        <a id="ref{i+1}"></a>
         <div style="background-color: #f9f9f9; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 10px;">
-            <b>Doc {i+1} – {report} – Page {page_number}</b><br>
+            <b>{ref} – {report} – Page {page_number}</b><br>
             <p style="font-size: 14px;">{chunk['text'][:500]}{'...' if len(chunk['text']) > 500 else ''}</p>
-            <p><i>Similarity score: {sim}%</i></p>
+            <p><i>Relevancy score: {rel}%</i></p>
             🔗 <a href="{pdf_url}" target="_blank">Open PDF</a>
         </div>
         """, unsafe_allow_html=True)
