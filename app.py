@@ -75,77 +75,27 @@ question = st.chat_input("Ask something about climate reports...")
 
 # === Submit new question ===
 if question and question.strip():
-    st.session_state.chat_history.append((question, "..."))  # Placeholder for pending answer
+    st.session_state.chat_history.append((question, "..."))  # Placeholder
 
 # === Layout: Chat on left, sources on right ===
 col1, col2 = st.columns([2, 1], gap="large")
 
 # --- Left: Chat display ---
 with col1:
-    for i, (user_msg, bot_msg) in enumerate(st.session_state.chat_history):
+    for user_msg, bot_msg in st.session_state.chat_history:
         def linkify_refs(text):
             return re.sub(r"\((\d+)\)", r"([\1](#ref\1))", text)
 
-        # If the bot hasn't answered yet
-        if bot_msg == "..." and i == len(st.session_state.chat_history) - 1:
-            st.markdown(f"""
-                <div class="chat-row user-row">
-                    <div class="chat-bubble user-bubble">{user_msg}</div>
-                </div>
-                <div class="chat-row bot-row">
-                    <div class="chat-bubble bot-bubble"><i>Typing...</i></div>
-                </div>
-            """, unsafe_allow_html=True)
-        else:
-            bot_msg_linked = linkify_refs(bot_msg)
-            st.markdown(f"""
-                <div class="chat-row user-row">
-                    <div class="chat-bubble user-bubble">{user_msg}</div>
-                </div>
-                <div class="chat-row bot-row">
-                    <div class="chat-bubble bot-bubble">{bot_msg_linked}</div>
-                </div>
-            """, unsafe_allow_html=True)
+        bot_msg_linked = linkify_refs(bot_msg)
 
-# === Generate response if needed ===
-if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "...":
-    question = st.session_state.chat_history[-1][0]
-
-    # Memory: up to 2 last Q&A pairs
-    memory = []
-    for user_msg, bot_msg in st.session_state.chat_history[-3:-1]:
-        memory.append({"user": user_msg, "assistant": bot_msg})
-
-    # Run RAG + generation
-    response = generate_answer(
-        query=question,
-        index=st.session_state.faiss_index,
-        chunk_ids=st.session_state.chunk_ids,
-        chunk_id_to_info=st.session_state.chunk_id_to_info,
-        k=4,
-        window=1,
-        rerank_top_n=6,
-        chat_history=memory
-    )
-
-    # Simulate streaming the answer
-    answer_full = response["answer"]
-    placeholder = col1.empty()  # Animate in left column
-    streamed = ""
-
-    for sentence in answer_full.split(". "):
-        streamed += sentence + " "
-        placeholder.markdown(f"""
+        st.markdown(f"""
+            <div class="chat-row user-row">
+                <div class="chat-bubble user-bubble">{user_msg}</div>
+            </div>
             <div class="chat-row bot-row">
-                <div class="chat-bubble bot-bubble">{streamed}</div>
+                <div class="chat-bubble bot-bubble">{bot_msg_linked}</div>
             </div>
         """, unsafe_allow_html=True)
-        time.sleep(0.05)
-
-    # Finalize
-    st.session_state.chat_history[-1] = (question, answer_full)
-    st.session_state.last_sources = response["chunks"]
-    st.rerun()
 
 # --- Right: Source display ---
 with col2:
@@ -170,3 +120,84 @@ with col2:
             🔗 <a href="{pdf_url}" target="_blank">Open PDF</a>
         </div>
         """, unsafe_allow_html=True)
+
+# === Generate response ===
+if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "...":
+    question = st.session_state.chat_history[-1][0]
+
+    # Memory: up to 2 last Q&A pairs
+    memory = []
+    for user_msg, bot_msg in st.session_state.chat_history[-3:-1]:
+        memory.append({"user": user_msg, "assistant": bot_msg})
+
+    progress_placeholder = st.empty()
+    start = time.time()
+
+    while True:
+        elapsed = time.time() - start
+        if elapsed < 30:
+            pct = int((elapsed / 30) * 80)
+        elif elapsed < 40:
+            pct = 80 + int(((elapsed - 30) / 10) * 10)
+        else:
+            pct = 90
+
+        progress_bar_html = f"""
+            <div class="loader-bar">
+                <div class="loader-fill" style="width: {pct}%;"></div>
+            </div>
+            <div style="text-align:center; font-style: italic; font-size: 14px;">Thinking... {pct}%</div>
+            <style>
+                .loader-bar {{
+                    width: 100%;
+                    height: 8px;
+                    background-color: #e0e0e0;
+                    border-radius: 8px;
+                    overflow: hidden;
+                    margin-top: 8px;
+                    margin-bottom: 12px;
+                }}
+                .loader-fill {{
+                    height: 100%;
+                    background-color: #81C244;
+                    transition: width 0.3s ease-in-out;
+                }}
+            </style>
+        """
+        progress_placeholder.markdown(progress_bar_html, unsafe_allow_html=True)
+
+        if elapsed >= 40:
+            break
+        time.sleep(0.25)
+
+    response = generate_answer(
+        query=question,
+        index=st.session_state.faiss_index,
+        chunk_ids=st.session_state.chunk_ids,
+        chunk_id_to_info=st.session_state.chunk_id_to_info,
+        k=4,
+        window=1,
+        rerank_top_n=6,
+        chat_history=memory
+    )
+
+    answer_full = response["answer"]
+    progress_placeholder.markdown(progress_bar_html.replace(f"width: {pct}%", "width: 100%").replace(f"{pct}%", "100%"), unsafe_allow_html=True)
+    time.sleep(0.3)
+    progress_placeholder.empty()
+
+    # Simulate word-by-word streaming
+    placeholder = st.empty()
+    streamed = ""
+    for word in answer_full.split():
+        streamed += word + " "
+        placeholder.markdown(f"""
+            <div class="chat-row bot-row">
+                <div class="chat-bubble bot-bubble">{streamed}</div>
+            </div>
+        """, unsafe_allow_html=True)
+        time.sleep(0.02)
+
+    st.session_state.chat_history[-1] = (question, answer_full)
+    st.session_state.last_sources = response["chunks"]
+    st.rerun()
