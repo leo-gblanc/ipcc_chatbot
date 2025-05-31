@@ -5,6 +5,7 @@ import time
 from rag_core import load_faiss_resources, generate_answer
 import re
 import streamlit as st
+import streamlit.components.v1 as components  # <-- Add this import
 
 # === Load FAISS and metadata once ===
 if "faiss_index" not in st.session_state:
@@ -58,6 +59,8 @@ st.markdown(
     }
 
     /* ---------- New CSS for the horizontal sources strip ---------- */
+    /* Note: This CSS is repeated inside the iframe, but having it here means
+       if you ever render via st.markdown it also remains consistent. */
     .sources-container {
         display: flex;
         flex-direction: row;
@@ -71,7 +74,6 @@ st.markdown(
     .source-card {
         display: inline-block;
         width: 320px;
-        /* If you want a fixed height, you can adjust it; else height:auto */
         vertical-align: top;
         background: #fff;
         margin-right: 12px;
@@ -79,6 +81,20 @@ st.markdown(
         border: 1px solid #ccc;
         border-radius: 10px;
         flex-shrink: 0;  /* Prevent cards from shrinking below 320px */
+    }
+    .source-card b {
+        font-size: 14px;
+        display: block;
+        margin-bottom: 0.5rem;
+    }
+    .source-card p {
+        font-size: 13px;
+        line-height: 1.2rem;
+        margin: 0.25rem 0;
+    }
+    .source-card a {
+        text-decoration: none;
+        font-size: 13px;
     }
     </style>
     """,
@@ -226,8 +242,48 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
 if st.session_state.last_sources:
     # Use a native Streamlit expander (arrow icon, collapsible)
     with st.expander("Show Sources", expanded=True):
-        # Build ONE big HTML block so the <div> nesting is correct
-        html = "<div class='sources-container'>"
+        # Build ONE big HTML block (including the CSS) so the <div> nesting is correct
+        html = """
+        <style>
+          .sources-container {
+            display: flex;
+            flex-direction: row;
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+            padding: 1rem;
+            background-color: #f0f0f0;
+            border-top: 2px solid #ddd;
+          }
+          .source-card {
+            display: inline-block;
+            width: 320px;
+            flex-shrink: 0;
+            vertical-align: top;
+            background: #fff;
+            margin-right: 12px;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+          }
+          .source-card b {
+            font-size: 14px;
+            display: block;
+            margin-bottom: 0.5rem;
+          }
+          .source-card p {
+            font-size: 13px;
+            line-height: 1.2rem;
+            margin: 0.25rem 0;
+          }
+          .source-card a {
+            text-decoration: none;
+            font-size: 13px;
+          }
+        </style>
+        <div class="sources-container">
+        """
+
         for i, chunk in enumerate(st.session_state.last_sources):
             meta = chunk.get("metadata", {})
             page = meta.get("source", "")
@@ -238,20 +294,22 @@ if st.session_state.last_sources:
             ref = chunk.get("reference", f"({i+1})")
 
             pdf_url = (
-                f"https://www.ipcc.ch/report/ar6/wg3/downloads/report/IPCC_AR6_WGIII_FullReport.pdf"
+                "https://www.ipcc.ch/report/ar6/wg3/downloads/report/"
+                "IPCC_AR6_WGIII_FullReport.pdf"
                 f"#page={page_number}"
             )
+            snippet = chunk["text"][:200].replace("\n", " ")
 
             html += f"""
-            <div class='source-card'>
-                <b>{ref} – {report} – Page {page_number}</b><br>
-                <p style='font-size: 14px;'>
-                    {chunk['text'][:500]}{'...' if len(chunk['text']) > 500 else ''}
-                </p>
-                <p><i>Relevancy score: {rel}%</i></p>
-                🔗 <a href="{pdf_url}" target="_blank">Open PDF</a>
+            <div class="source-card">
+              <b>{ref} – {report} – Page {page_number}</b>
+              <p>{snippet}{'…' if len(chunk['text']) > 200 else ''}</p>
+              <p><i>Relevancy: {rel}%</i></p>
+              <a href="{pdf_url}" target="_blank">Open PDF</a>
             </div>
             """
+
         html += "</div>"
 
-        st.markdown(html, unsafe_allow_html=True)
+        # Render the entire HTML block as a single component with fixed height
+        components.html(html, height=260, scrolling=True)
