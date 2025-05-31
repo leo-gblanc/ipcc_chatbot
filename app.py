@@ -139,8 +139,14 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
             pct = int((elapsed / 30) * 80)
         elif elapsed < 40:
             pct = 80 + int(((elapsed - 30) / 10) * 10)
+        elif elapsed < 50:
+            pct = 90 + int(((elapsed - 40) / 10) * 5)
+        elif elapsed < 60:
+            pct = 95 + int(((elapsed - 50) / 10) * 3)
+        elif elapsed < 75:
+            pct = 98 + int(((elapsed - 60) / 15) * 1)
         else:
-            pct = 90
+            pct = 99
 
         progress_bar_html = f"""
             <div class="loader-bar">
@@ -149,7 +155,8 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
             <div style="text-align:center; font-style: italic; font-size: 14px;">Thinking... {pct}%</div>
             <style>
                 .loader-bar {{
-                    width: 100%;
+                    width: 60%;
+                    margin: auto;
                     height: 8px;
                     background-color: #e0e0e0;
                     border-radius: 8px;
@@ -166,7 +173,7 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
         """
         progress_placeholder.markdown(progress_bar_html, unsafe_allow_html=True)
 
-        if elapsed >= 40:
+        if elapsed >= 75:
             break
         time.sleep(0.25)
 
@@ -201,3 +208,65 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
     st.session_state.chat_history[-1] = (question, answer_full)
     st.session_state.last_sources = response["chunks"]
     st.rerun()
+
+
+# === Chat display ===
+for user_msg, bot_msg in st.session_state.chat_history:
+    def linkify_refs(text):
+        return re.sub(r"\((\d+)\)", r"([\1](#ref\1))", text)
+
+    bot_msg_linked = linkify_refs(bot_msg)
+
+    st.markdown(f"""
+        <div class="chat-row user-row">
+            <div class="chat-bubble user-bubble">{user_msg}</div>
+        </div>
+        <div class="chat-row bot-row">
+            <div class="chat-bubble bot-bubble">{bot_msg_linked}</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+# === Collapsible Horizontal Sources Section ===
+if st.session_state.last_sources:
+    if st.toggle("🔎 Show Sources", value=True):
+        st.markdown("""
+            <style>
+                .scrolling-wrapper {
+                    display: flex;
+                    flex-wrap: nowrap;
+                    overflow-x: auto;
+                    gap: 12px;
+                    padding: 1rem;
+                }
+                .scrolling-wrapper > div {
+                    flex: 0 0 auto;
+                    width: 320px;
+                    background: #f9f9f9;
+                    border: 1px solid #ccc;
+                    border-radius: 10px;
+                    padding: 12px;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+
+        st.markdown("<div class='scrolling-wrapper'>", unsafe_allow_html=True)
+        for i, chunk in enumerate(st.session_state.last_sources):
+            meta = chunk.get("metadata", {})
+            page = meta.get("source", "")
+            report = meta.get("report_name", "Unknown Report")
+            page_number = int(page.replace("page_", "")) if "page_" in page else "?"
+            score = chunk.get("reranker_score", 0.0)
+            rel = round((score + 10) * 5, 1)
+            ref = chunk.get("reference", f"({i+1})")
+
+            pdf_url = f"https://www.ipcc.ch/report/ar6/wg3/downloads/report/IPCC_AR6_WGIII_FullReport.pdf#page={page_number}"
+
+            st.markdown(f"""
+            <div>
+                <b>{ref} – {report} – Page {page_number}</b><br>
+                <p style='font-size: 14px;'>{chunk['text'][:500]}{'...' if len(chunk['text']) > 500 else ''}</p>
+                <p><i>Relevancy score: {rel}%</i></p>
+                🔗 <a href="{pdf_url}" target="_blank">Open PDF</a>
+            </div>
+            """, unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
