@@ -19,31 +19,6 @@ st.set_page_config(page_title="IPCC Assistant", page_icon="💬", layout="wide")
 # --- Custom CSS ---
 st.markdown("""
     <style>
-    .chat-container {
-        height: 70vh;
-        overflow-y: auto;
-        padding-bottom: 2rem;
-    }
-    .sources-container {
-        height: 20vh;
-        overflow-x: auto;
-        overflow-y: hidden;
-        white-space: nowrap;
-        background: #f0f0f0;
-        padding: 1rem;
-    }
-    .source-bubble {
-        display: inline-block;
-        vertical-align: top;
-        width: 280px;
-        height: 100%;
-        margin-right: 12px;
-        background: #ffffff;
-        border: 1px solid #ccc;
-        border-radius: 10px;
-        padding: 12px;
-        box-sizing: border-box;
-    }
     .chat-bubble {
         border-radius: 12px;
         padding: 0.75rem 1rem;
@@ -80,6 +55,26 @@ st.markdown("""
         border: 2px solid #81C244 !important;
         outline: none !important;
     }
+    .sources-container {
+        max-height: 250px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        white-space: nowrap;
+        padding: 1rem;
+        background-color: #f0f0f0;
+        border-top: 2px solid #ddd;
+    }
+    .source-card {
+        display: inline-block;
+        width: 320px;
+        height: 100%;
+        vertical-align: top;
+        background: #fff;
+        margin-right: 12px;
+        padding: 12px;
+        border: 1px solid #ccc;
+        border-radius: 10px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -100,7 +95,6 @@ if question and question.strip():
     st.session_state.chat_history.append((question, "..."))  # Placeholder
 
 # === Chat display ===
-st.markdown('<div class="chat-container">', unsafe_allow_html=True)
 for user_msg, bot_msg in st.session_state.chat_history:
     def linkify_refs(text):
         return re.sub(r"\((\d+)\)", r"([\1](#ref\1))", text)
@@ -115,13 +109,11 @@ for user_msg, bot_msg in st.session_state.chat_history:
             <div class="chat-bubble bot-bubble">{bot_msg_linked}</div>
         </div>
     """, unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
 
 # === Generate response ===
 if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "...":
     question = st.session_state.chat_history[-1][0]
 
-    # Memory: up to 2 last Q&A pairs
     memory = []
     for user_msg, bot_msg in st.session_state.chat_history[-3:-1]:
         memory.append({"user": user_msg, "assistant": bot_msg})
@@ -189,7 +181,6 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
     time.sleep(0.3)
     progress_placeholder.empty()
 
-    # Simulate word-by-word streaming
     placeholder = st.empty()
     streamed = ""
     for word in answer_full.split():
@@ -205,9 +196,9 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
     st.session_state.last_sources = response["chunks"]
     st.rerun()
 
-# === Collapsible Horizontal Sources Section ===
+# === Independent Scrollable Sources Section ===
 if st.session_state.last_sources:
-    if st.toggle("🔎 Show Sources", value=True):
+    if st.toggle("Show Sources", value=True):
         st.markdown("<div class='sources-container'>", unsafe_allow_html=True)
         for i, chunk in enumerate(st.session_state.last_sources):
             meta = chunk.get("metadata", {})
@@ -221,7 +212,7 @@ if st.session_state.last_sources:
             pdf_url = f"https://www.ipcc.ch/report/ar6/wg3/downloads/report/IPCC_AR6_WGIII_FullReport.pdf#page={page_number}"
 
             st.markdown(f"""
-            <div class='source-bubble'>
+            <div class='source-card'>
                 <b>{ref} – {report} – Page {page_number}</b><br>
                 <p style='font-size: 14px;'>{chunk['text'][:500]}{'...' if len(chunk['text']) > 500 else ''}</p>
                 <p><i>Relevancy score: {rel}%</i></p>
