@@ -19,6 +19,31 @@ st.set_page_config(page_title="IPCC Assistant", page_icon="💬", layout="wide")
 # --- Custom CSS ---
 st.markdown("""
     <style>
+    .chat-container {
+        height: 70vh;
+        overflow-y: auto;
+        padding-bottom: 2rem;
+    }
+    .sources-container {
+        height: 20vh;
+        overflow-x: auto;
+        overflow-y: hidden;
+        white-space: nowrap;
+        background: #f0f0f0;
+        padding: 1rem;
+    }
+    .source-bubble {
+        display: inline-block;
+        vertical-align: top;
+        width: 280px;
+        height: 100%;
+        margin-right: 12px;
+        background: #ffffff;
+        border: 1px solid #ccc;
+        border-radius: 10px;
+        padding: 12px;
+        box-sizing: border-box;
+    }
     .chat-bubble {
         border-radius: 12px;
         padding: 0.75rem 1rem;
@@ -65,10 +90,7 @@ if "last_sources" not in st.session_state:
     st.session_state.last_sources = []
 
 # --- Header ---
-st.markdown(
-    """<h1 style="text-align: center; font-size: 50px; margin-bottom: 2rem;">IPCC Assistant</h1>""",
-    unsafe_allow_html=True
-)
+st.markdown("""<h1 style="text-align: center; font-size: 50px; margin-bottom: 2rem;">IPCC Assistant</h1>""", unsafe_allow_html=True)
 
 # --- Chat input ---
 question = st.chat_input("Ask something about climate reports...")
@@ -77,49 +99,23 @@ question = st.chat_input("Ask something about climate reports...")
 if question and question.strip():
     st.session_state.chat_history.append((question, "..."))  # Placeholder
 
-# === Layout: Chat on left, sources on right ===
-col1, col2 = st.columns([2, 1], gap="large")
+# === Chat display ===
+st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+for user_msg, bot_msg in st.session_state.chat_history:
+    def linkify_refs(text):
+        return re.sub(r"\((\d+)\)", r"([\1](#ref\1))", text)
 
-# --- Left: Chat display ---
-with col1:
-    for user_msg, bot_msg in st.session_state.chat_history:
-        def linkify_refs(text):
-            return re.sub(r"\((\d+)\)", r"([\1](#ref\1))", text)
+    bot_msg_linked = linkify_refs(bot_msg)
 
-        bot_msg_linked = linkify_refs(bot_msg)
-
-        st.markdown(f"""
-            <div class="chat-row user-row">
-                <div class="chat-bubble user-bubble">{user_msg}</div>
-            </div>
-            <div class="chat-row bot-row">
-                <div class="chat-bubble bot-bubble">{bot_msg_linked}</div>
-            </div>
-        """, unsafe_allow_html=True)
-
-# --- Right: Source display ---
-with col2:
-    st.markdown("### 🔎 Sources")
-    for i, chunk in enumerate(st.session_state.last_sources):
-        meta = chunk.get("metadata", {})
-        page = meta.get("source", "")
-        report = meta.get("report_name", "Unknown Report")
-        page_number = int(page.replace("page_", "")) if "page_" in page else "?"
-        score = chunk.get("reranker_score", 0.0)
-        rel = round((score + 10) * 5, 1)
-        ref = chunk.get("reference", f"({i+1})")
-
-        pdf_url = f"https://www.ipcc.ch/report/ar6/wg3/downloads/report/IPCC_AR6_WGIII_FullReport.pdf#page={page_number}"
-
-        st.markdown(f"""
-        <a id="ref{i+1}"></a>
-        <div style="background-color: #f9f9f9; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 10px;">
-            <b>{ref} – {report} – Page {page_number}</b><br>
-            <p style="font-size: 14px;">{chunk['text'][:500]}{'...' if len(chunk['text']) > 500 else ''}</p>
-            <p><i>Relevancy score: {rel}%</i></p>
-            🔗 <a href="{pdf_url}" target="_blank">Open PDF</a>
+    st.markdown(f"""
+        <div class="chat-row user-row">
+            <div class="chat-bubble user-bubble">{user_msg}</div>
         </div>
-        """, unsafe_allow_html=True)
+        <div class="chat-row bot-row">
+            <div class="chat-bubble bot-bubble">{bot_msg_linked}</div>
+        </div>
+    """, unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
 # === Generate response ===
 if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "...":
@@ -209,47 +205,10 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
     st.session_state.last_sources = response["chunks"]
     st.rerun()
 
-
-# === Chat display ===
-for user_msg, bot_msg in st.session_state.chat_history:
-    def linkify_refs(text):
-        return re.sub(r"\((\d+)\)", r"([\1](#ref\1))", text)
-
-    bot_msg_linked = linkify_refs(bot_msg)
-
-    st.markdown(f"""
-        <div class="chat-row user-row">
-            <div class="chat-bubble user-bubble">{user_msg}</div>
-        </div>
-        <div class="chat-row bot-row">
-            <div class="chat-bubble bot-bubble">{bot_msg_linked}</div>
-        </div>
-    """, unsafe_allow_html=True)
-
 # === Collapsible Horizontal Sources Section ===
 if st.session_state.last_sources:
-    if st.toggle("🔎 Show Sources", value=True):
-        st.markdown("""
-            <style>
-                .scrolling-wrapper {
-                    display: flex;
-                    flex-wrap: nowrap;
-                    overflow-x: auto;
-                    gap: 12px;
-                    padding: 1rem;
-                }
-                .scrolling-wrapper > div {
-                    flex: 0 0 auto;
-                    width: 320px;
-                    background: #f9f9f9;
-                    border: 1px solid #ccc;
-                    border-radius: 10px;
-                    padding: 12px;
-                }
-            </style>
-        """, unsafe_allow_html=True)
-
-        st.markdown("<div class='scrolling-wrapper'>", unsafe_allow_html=True)
+    if st.toggle("\ud83d\udd0e Show Sources", value=True):
+        st.markdown("<div class='sources-container'>", unsafe_allow_html=True)
         for i, chunk in enumerate(st.session_state.last_sources):
             meta = chunk.get("metadata", {})
             page = meta.get("source", "")
@@ -262,7 +221,7 @@ if st.session_state.last_sources:
             pdf_url = f"https://www.ipcc.ch/report/ar6/wg3/downloads/report/IPCC_AR6_WGIII_FullReport.pdf#page={page_number}"
 
             st.markdown(f"""
-            <div>
+            <div class='source-bubble'>
                 <b>{ref} – {report} – Page {page_number}</b><br>
                 <p style='font-size: 14px;'>{chunk['text'][:500]}{'...' if len(chunk['text']) > 500 else ''}</p>
                 <p><i>Relevancy score: {rel}%</i></p>
