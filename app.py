@@ -17,7 +17,8 @@ if "faiss_index" not in st.session_state:
 st.set_page_config(page_title="IPCC Assistant", page_icon="💬", layout="wide")
 
 # --- Custom CSS ---
-st.markdown("""
+st.markdown(
+    """
     <style>
     .chat-bubble {
         border-radius: 12px;
@@ -55,8 +56,11 @@ st.markdown("""
         border: 2px solid #81C244 !important;
         outline: none !important;
     }
+
+    /* ---------- New CSS for the horizontal sources strip ---------- */
     .sources-container {
-        max-height: 250px;
+        display: flex;
+        flex-direction: row;
         overflow-x: auto;
         overflow-y: hidden;
         white-space: nowrap;
@@ -67,16 +71,19 @@ st.markdown("""
     .source-card {
         display: inline-block;
         width: 320px;
-        height: 100%;
+        /* If you want a fixed height, you can adjust it; else height:auto */
         vertical-align: top;
         background: #fff;
         margin-right: 12px;
         padding: 12px;
         border: 1px solid #ccc;
         border-radius: 10px;
+        flex-shrink: 0;  /* Prevent cards from shrinking below 320px */
     }
     </style>
-""", unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True,
+)
 
 # --- Initialize session state ---
 if "chat_history" not in st.session_state:
@@ -85,42 +92,52 @@ if "last_sources" not in st.session_state:
     st.session_state.last_sources = []
 
 # --- Header ---
-st.markdown("""<h1 style="text-align: center; font-size: 50px; margin-bottom: 2rem;">IPCC Assistant</h1>""", unsafe_allow_html=True)
+st.markdown(
+    """<h1 style="text-align: center; font-size: 50px; margin-bottom: 2rem;">IPCC Assistant</h1>""",
+    unsafe_allow_html=True,
+)
 
-# --- Chat input ---
+# --- Chat input (this appears at the bottom of the page) ---
 question = st.chat_input("Ask something about climate reports...")
 
 # === Submit new question ===
 if question and question.strip():
-    st.session_state.chat_history.append((question, "..."))  # Placeholder
+    st.session_state.chat_history.append((question, "..."))  # Placeholder for streaming
 
 # === Chat display ===
 for user_msg, bot_msg in st.session_state.chat_history:
+
     def linkify_refs(text):
+        # Turn (1), (2), etc. into clickable anchors (if needed)
         return re.sub(r"\((\d+)\)", r"([\1](#ref\1))", text)
 
     bot_msg_linked = linkify_refs(bot_msg)
 
-    st.markdown(f"""
+    # Display the user’s message
+    st.markdown(
+        f"""
         <div class="chat-row user-row">
             <div class="chat-bubble user-bubble">{user_msg}</div>
         </div>
         <div class="chat-row bot-row">
             <div class="chat-bubble bot-bubble">{bot_msg_linked}</div>
         </div>
-    """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True,
+    )
 
-# === Generate response ===
+# === Generate response logic ===
 if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "...":
     question = st.session_state.chat_history[-1][0]
 
+    # Build a short “memory” of the last couple of turns
     memory = []
     for user_msg, bot_msg in st.session_state.chat_history[-3:-1]:
         memory.append({"user": user_msg, "assistant": bot_msg})
 
+    # Show a fake “thinking” progress bar
     progress_placeholder = st.empty()
     start = time.time()
-
     while True:
         elapsed = time.time() - start
         if elapsed < 30:
@@ -173,33 +190,44 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
         k=4,
         window=1,
         rerank_top_n=6,
-        chat_history=memory
+        chat_history=memory,
     )
 
     answer_full = response["answer"]
-    progress_placeholder.markdown(progress_bar_html.replace(f"width: {pct}%", "width: 100%").replace(f"{pct}%", "100%"), unsafe_allow_html=True)
+    # Force the progress bar to 100%
+    progress_placeholder.markdown(
+        progress_bar_html.replace(f"width: {pct}%", "width: 100%").replace(f"{pct}%", "100%"),
+        unsafe_allow_html=True,
+    )
     time.sleep(0.3)
     progress_placeholder.empty()
 
+    # Stream the assistant’s answer word by word
     placeholder = st.empty()
     streamed = ""
     for word in answer_full.split():
         streamed += word + " "
-        placeholder.markdown(f"""
+        placeholder.markdown(
+            f"""
             <div class="chat-row bot-row">
                 <div class="chat-bubble bot-bubble">{streamed}</div>
             </div>
-        """, unsafe_allow_html=True)
+            """,
+            unsafe_allow_html=True,
+        )
         time.sleep(0.02)
 
+    # Replace the placeholder with the full answer
     st.session_state.chat_history[-1] = (question, answer_full)
     st.session_state.last_sources = response["chunks"]
     st.rerun()
 
-# === Independent Scrollable Sources Section ===
+# === Collapsible, horizontally scrollable “Sources” strip at the bottom ===
 if st.session_state.last_sources:
-    if st.toggle("Show Sources", value=True):
-        st.markdown("<div class='sources-container'>", unsafe_allow_html=True)
+    # Use a native Streamlit expander (arrow icon, collapsible)
+    with st.expander("Show Sources", expanded=True):
+        # Build ONE big HTML block so the <div> nesting is correct
+        html = "<div class='sources-container'>"
         for i, chunk in enumerate(st.session_state.last_sources):
             meta = chunk.get("metadata", {})
             page = meta.get("source", "")
@@ -209,14 +237,21 @@ if st.session_state.last_sources:
             rel = round((score + 10) * 5, 1)
             ref = chunk.get("reference", f"({i+1})")
 
-            pdf_url = f"https://www.ipcc.ch/report/ar6/wg3/downloads/report/IPCC_AR6_WGIII_FullReport.pdf#page={page_number}"
+            pdf_url = (
+                f"https://www.ipcc.ch/report/ar6/wg3/downloads/report/IPCC_AR6_WGIII_FullReport.pdf"
+                f"#page={page_number}"
+            )
 
-            st.markdown(f"""
+            html += f"""
             <div class='source-card'>
                 <b>{ref} – {report} – Page {page_number}</b><br>
-                <p style='font-size: 14px;'>{chunk['text'][:500]}{'...' if len(chunk['text']) > 500 else ''}</p>
+                <p style='font-size: 14px;'>
+                    {chunk['text'][:500]}{'...' if len(chunk['text']) > 500 else ''}
+                </p>
                 <p><i>Relevancy score: {rel}%</i></p>
                 🔗 <a href="{pdf_url}" target="_blank">Open PDF</a>
             </div>
-            """, unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+            """
+        html += "</div>"
+
+        st.markdown(html, unsafe_allow_html=True)
