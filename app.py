@@ -1,13 +1,9 @@
 import sys
 import types
 import os
-
-if not os.environ.get("STREAMLIT_CLOUD", False):  # or any other custom env flag
-    sys.modules["torch.classes"] = types.ModuleType("torch.classes")
-    setattr(sys.modules["torch.classes"], "__path__", [])
-
 import time
 from rag_core import load_faiss_resources, generate_answer
+import re
 import streamlit as st
 
 # === Load FAISS and metadata once ===
@@ -107,10 +103,8 @@ col1, col2 = st.columns([2, 1], gap="large")
 # --- Left: Chat display ---
 with col1:
     for user_msg, bot_msg in st.session_state.chat_history:
-        # Make inline refs like [1] clickable: [1](#ref1)
         def linkify_refs(text):
-            import re
-            return re.sub(r"\[(\d+)\]", r"[\1](#ref\1)", text)
+            return re.sub(r"\((\d+)\)", r"([\1](#ref\1))", text)
 
         bot_msg_linked = linkify_refs(bot_msg)
 
@@ -132,8 +126,8 @@ with col2:
         report = meta.get("report_name", "Unknown Report")
         page_number = int(page.replace("page_", "")) if "page_" in page else "?"
         score = chunk.get("reranker_score", 0.0)
-        rel = round((score + 10) * 5, 1)  # Rescaled for display: rough 0–100%
-        ref = chunk.get("reference", f"[{i+1}]")
+        rel = round((score + 10) * 5, 1)  # Rescaled for display
+        ref = chunk.get("reference", f"({i+1})")
 
         pdf_url = f"https://www.ipcc.ch/report/ar6/wg3/downloads/report/IPCC_AR6_WGIII_FullReport.pdf#page={page_number}"
 

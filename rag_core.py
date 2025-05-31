@@ -121,18 +121,18 @@ def generate_answer(query: str, index, chunk_ids, chunk_id_to_info, k: int = 5, 
     top_groups = rerank_chunk_groups(query, all_groups, top_n=rerank_top_n)
     selected_chunks = [chunk for group in top_groups for chunk in group]
 
-    # Tag chunks with inline references [1], [2], ...
+    # Tag chunks with inline references (1), (2), ...
     context_text = ""
     for i, chunk in enumerate(selected_chunks):
-        ref = f"[{i+1}]"
+        ref = f"({i+1})"
         chunk["reference"] = ref
         context_text += f"{ref} {chunk['text']}\n\n"
 
     prompt = (
-        "Use the numbered references in the context to cite where each fact comes from.\n\n"
+        "Use the numbered references in the context to cite where each fact comes from. Ignore any citations like [914] or [6813] that may appear inside the text.\n\n"
         f"Context:\n{context_text}\n\n"
         f"Question: {query}\n\n"
-        "Provide a detailed answer using inline references like [1], [2], etc. to indicate sources."
+        "Provide a detailed answer using inline references like (1), (2), etc. to indicate sources."
     )
 
     msgs = [
