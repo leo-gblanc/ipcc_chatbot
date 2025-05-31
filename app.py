@@ -16,7 +16,7 @@ if "faiss_index" not in st.session_state:
 # --- Set page configuration ---
 st.set_page_config(page_title="IPCC Assistant", page_icon="💬", layout="wide")
 
-# --- Custom CSS for chat bubbles and sources (applies to st.markdown content) ---
+# --- Custom CSS for chat bubbles and source‐cards ---
 st.markdown(
     """
     <style>
@@ -77,7 +77,7 @@ st.markdown(
         flex-direction: column;
         justify-content: space-between;
         width: 320px;
-        min-height: 120px;
+        height: 180px;               /* Fixed height */
         background: #fff;
         margin-right: 12px;
         padding: 12px;
@@ -87,7 +87,7 @@ st.markdown(
         font-family: inherit;
         font-size: 14px;
         line-height: 1.3;
-        overflow-wrap: break-word;
+        overflow: hidden;            /* Ensure nothing can escape the box */
     }
     .source-card-header {
         font-weight: bold;
@@ -95,10 +95,10 @@ st.markdown(
     }
     .source-card-snippet {
         flex-grow: 1;
+        overflow: hidden;            /* Clip excess lines */
         margin-bottom: 0.5rem;
     }
     .source-card-footer {
-        margin-top: 0.5rem;
         font-size: 13px;
     }
     .source-card a {
@@ -123,7 +123,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- Chat input (this appears at the bottom of the page) ---
+# --- Chat input (appears at bottom) ---
 question = st.chat_input("Ask something about climate reports...")
 
 # === Submit new question ===
@@ -135,11 +135,15 @@ for user_msg, bot_msg in st.session_state.chat_history:
 
     def linkify_refs(text):
         # Turn (1), (2), etc. into clickable anchors
-        return re.sub(r"\((\d+)\)", r"""<a href="#ref\1" style="text-decoration:none;color:#0077cc;">(\1)</a>""", text)
+        return re.sub(
+            r"\((\d+)\)",
+            r'<a href="#ref\1" style="text-decoration:none;color:#0077cc;">(\1)</a>',
+            text,
+        )
 
     bot_msg_html = linkify_refs(bot_msg)
 
-    # Display the user’s message and bot’s response
+    # Display user’s message and bot’s response
     st.markdown(
         f"""
         <div class="chat-row user-row">
@@ -161,7 +165,7 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
     for user_msg, bot_msg in st.session_state.chat_history[-3:-1]:
         memory.append({"user": user_msg, "assistant": bot_msg})
 
-    # Show a fake “thinking” progress bar
+    # Show a fake “thinking...” progress bar
     progress_placeholder = st.empty()
     start = time.time()
     while True:
@@ -269,7 +273,7 @@ if st.session_state.last_sources:
             flex-direction: column;
             justify-content: space-between;
             width: 320px;
-            min-height: 120px;
+            height: 180px;             /* Fixed height */
             background: #fff;
             margin-right: 12px;
             padding: 12px;
@@ -279,7 +283,7 @@ if st.session_state.last_sources:
             font-family: inherit;
             font-size: 14px;
             line-height: 1.3;
-            overflow-wrap: break-word;
+            overflow: hidden;          /* Clip anything outside */
           }
           .source-card-header {
             font-weight: bold;
@@ -287,10 +291,10 @@ if st.session_state.last_sources:
           }
           .source-card-snippet {
             flex-grow: 1;
+            overflow: hidden;          /* Clip excess lines */
             margin-bottom: 0.5rem;
           }
           .source-card-footer {
-            margin-top: 0.5rem;
             font-size: 13px;
           }
           .source-card a {
@@ -317,9 +321,12 @@ if st.session_state.last_sources:
             # Header line
             html += f'<div class="source-card-header">{ref} – {report} – Page {page_number}</div>'
 
-            # Snippet, up to 200 chars
-            snippet = chunk["text"][:200].replace("\n", " ")
-            html += f'<div class="source-card-snippet">{snippet}{"…" if len(chunk["text"]) > 200 else ""}</div>'
+            # Snippet (max 250 chars), clipped if too long
+            raw_text = chunk["text"]
+            snippet = raw_text[:250].replace("\n", " ")
+            if len(raw_text) > 250:
+                snippet = snippet.rstrip() + "…"
+            html += f'<div class="source-card-snippet">{snippet}</div>'
 
             # Footer: relevancy + link
             pdf_url = (
