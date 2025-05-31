@@ -1,6 +1,14 @@
-import streamlit as st
+import sys
+import types
+import os
+
+if not os.environ.get("STREAMLIT_CLOUD", False):  # or any other custom env flag
+    sys.modules["torch.classes"] = types.ModuleType("torch.classes")
+    setattr(sys.modules["torch.classes"], "__path__", [])
+
 import time
-from rag_core import load_faiss_resources, generate_answer  # Your RAG backend logic
+from rag_core import load_faiss_resources, generate_answer
+import streamlit as st
 
 # === Load FAISS and metadata once ===
 if "faiss_index" not in st.session_state:
@@ -13,8 +21,7 @@ if "faiss_index" not in st.session_state:
 st.set_page_config(page_title="IPCC Assistant", page_icon="💬", layout="wide")
 
 # --- Custom CSS ---
-st.markdown(
-    """
+st.markdown("""
     <style>
     .chat-bubble {
         border-radius: 12px;
@@ -53,9 +60,7 @@ st.markdown(
         outline: none !important;
     }
     </style>
-    """,
-    unsafe_allow_html=True
-)
+""", unsafe_allow_html=True)
 
 # --- Initialize session state ---
 if "chat_history" not in st.session_state:
@@ -65,54 +70,53 @@ if "last_sources" not in st.session_state:
 
 # --- Header ---
 st.markdown(
-    """
-    <h1 style="text-align: center; font-size: 50px; margin-bottom: 2rem;">IPCC Assistant</h1>
-    """,
+    """<h1 style="text-align: center; font-size: 50px; margin-bottom: 2rem;">IPCC Assistant</h1>""",
     unsafe_allow_html=True
 )
 
 # --- Chat input ---
 question = st.chat_input("Ask something about climate reports...")
 
-# === On question submit ===
+# === Submit new question ===
 if question and question.strip():
-    st.session_state.chat_history.append((question, ""))  # Save question with empty answer
+    st.session_state.chat_history.append((question, ""))  # Add blank answer
     st.rerun()
 
-# === Handle answer generation ===
+# === Generate response ===
 if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "":
     question = st.session_state.chat_history[-1][0]
 
     with st.spinner("Thinking..."):
         response = generate_answer(
-            question,
-            st.session_state.faiss_index,
-            st.session_state.chunk_ids,
-            st.session_state.chunk_id_to_info,
-            k=5,
-            window=1  # Retrieve neighbors
+            query=question,
+            index=st.session_state.faiss_index,
+            chunk_ids=st.session_state.chunk_ids,
+            chunk_id_to_info=st.session_state.chunk_id_to_info,
+            k=4,
+            window=1,
+            rerank_top_n=6
         )
 
     st.session_state.chat_history[-1] = (question, response["answer"])
     st.session_state.last_sources = response["chunks"]
     st.rerun()
 
-# === Layout with chat on the left and sources on the right ===
+# === Layout: Chat on left, sources on right ===
 col1, col2 = st.columns([2, 1], gap="large")
 
-# --- Left: Chat bubbles ---
+# --- Left: Chat display ---
 with col1:
-    for user_msg, assistant_msg in st.session_state.chat_history:
+    for user_msg, bot_msg in st.session_state.chat_history:
         st.markdown(f"""
             <div class="chat-row user-row">
                 <div class="chat-bubble user-bubble">{user_msg}</div>
             </div>
             <div class="chat-row bot-row">
-                <div class="chat-bubble bot-bubble">{assistant_msg}</div>
+                <div class="chat-bubble bot-bubble">{bot_msg}</div>
             </div>
         """, unsafe_allow_html=True)
 
-# --- Right: Sources used ---
+# --- Right: Source display ---
 with col2:
     st.markdown("### 🔎 Sources")
     for i, chunk in enumerate(st.session_state.last_sources):
@@ -120,7 +124,7 @@ with col2:
         page = meta.get("source", "")
         report = meta.get("report_name", "Unknown Report")
         page_number = int(page.replace("page_", "")) if "page_" in page else "?"
-        similarity = round(chunk["distance"] * 100, 1)  # IndexFlatIP with normalized vectors
+        sim = round(chunk.get("faiss_similarity", 0) * 100, 1)
 
         pdf_url = f"https://www.ipcc.ch/report/ar6/wg3/downloads/report/IPCC_AR6_WGIII_FullReport.pdf#page={page_number}"
 
@@ -128,7 +132,7 @@ with col2:
         <div style="background-color: #f9f9f9; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; border-radius: 10px;">
             <b>Doc {i+1} – {report} – Page {page_number}</b><br>
             <p style="font-size: 14px;">{chunk['text'][:500]}{'...' if len(chunk['text']) > 500 else ''}</p>
-            <p><i>Similarity score: {similarity}%</i></p>
+            <p><i>Similarity score: {sim}%</i></p>
             🔗 <a href="{pdf_url}" target="_blank">Open PDF</a>
         </div>
         """, unsafe_allow_html=True)

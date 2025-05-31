@@ -3,3 +3,6 @@ langchain
 databricks-langchain
 faiss-cpu
 numpy
+scikit-learn
+torch
+transformers
