@@ -207,7 +207,7 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
 
 # === Collapsible Horizontal Sources Section ===
 if st.session_state.last_sources:
-    if st.toggle("\ud83d\udd0e Show Sources", value=True):
+    if st.toggle("🔎 Show Sources", value=True):
         st.markdown("<div class='sources-container'>", unsafe_allow_html=True)
         for i, chunk in enumerate(st.session_state.last_sources):
             meta = chunk.get("metadata", {})
