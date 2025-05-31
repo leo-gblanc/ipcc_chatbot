@@ -8,6 +8,7 @@ import os
 from sklearn.preprocessing import normalize
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
+import time  # ← Add import for timing
 
 # === Configuration ===
 
@@ -101,13 +102,33 @@ def rerank_chunk_groups(query, chunk_groups, top_n=5):
             chunk["reranker_score"] = round(scores[idx].item(), 4)
     return top_groups
 
-# === Generate answer ===
-def generate_answer(query: str, index, chunk_ids, chunk_id_to_info, k: int = 5, window: int = 1, rerank_top_n: int = 6, chat_history: list = []):
+# === Generate answer with timing measurements ===
+def generate_answer(query: str,
+                    index,
+                    chunk_ids,
+                    chunk_id_to_info,
+                    k: int = 5,
+                    window: int = 1,
+                    rerank_top_n: int = 6,
+                    chat_history: list = []):
+    timings = {}
+
+    # 1) Contextualization
+    t0 = time.time()
     context = contextualize_query_with_background(query)
+    timings["contextualization"] = time.time() - t0
+
+    # 2) Paraphrase generation
+    t1 = time.time()
     paraphrases = generate_paraphrases(query)
+    timings["paraphrase_generation"] = time.time() - t1
+
+    # Build enriched queries
     queries = [query] + paraphrases
     enriched_queries = [f"{q}\n\n{context}" for q in queries]
 
+    # 3) FAISS retrieval + reranking
+    t2 = time.time()
     all_groups = []
     seen_ids = set()
     for q in enriched_queries:
@@ -119,6 +140,8 @@ def generate_answer(query: str, index, chunk_ids, chunk_id_to_info, k: int = 5, 
                 all_groups.append(group)
 
     top_groups = rerank_chunk_groups(query, all_groups, top_n=rerank_top_n)
+    timings["retrieval_and_rerank"] = time.time() - t2
+
     selected_chunks = [chunk for group in top_groups for chunk in group]
 
     # Tag chunks with inline references (1), (2), ...
@@ -137,17 +160,22 @@ def generate_answer(query: str, index, chunk_ids, chunk_id_to_info, k: int = 5, 
         ])
 
     prompt = (
-        "Use the numbered references in the context to cite where each fact comes from. Ignore any citations like [914] or [6813] that may appear inside the text.\n\n"
+        "Use the numbered references in the context to cite where each fact comes from. "
+        "Ignore any citations like [914] or [6813] that may appear inside the text.\n\n"
         f"Context:\n{context_text}\n\n"
         f"Question: {query}\n\n"
         "Provide a detailed answer using inline references like (1), (2), etc. to indicate sources."
     )
 
+    # 4) Final LLM generation
+    t3 = time.time()
     msgs = memory_msgs + [
         SystemMessage(content="""
-        You are an expert assistant specialized in climate change impacts, with a focus on economic consequences such as demand shifts, productivity variations, resource dependencies, and regulatory dynamics.
+        You are an expert assistant specialized in climate change impacts, with a focus on economic consequences 
+        such as demand shifts, productivity variations, resource dependencies, and regulatory dynamics.
 
-        Use only the provided context from official IPCC reports and related documents to answer the user's question. Do not invent information or cite external knowledge.
+        Use only the provided context from official IPCC reports and related documents to answer the user's question. 
+        Do not invent information or cite external knowledge.
 
         When answering:
         - Provide clear and fact-based explanations.
@@ -155,10 +183,15 @@ def generate_answer(query: str, index, chunk_ids, chunk_id_to_info, k: int = 5, 
         - Cite specific data points, scenarios, or mechanisms if available in the context.
         - If the context does not contain a direct answer, briefly mention that a precise answer may not be available.
 
-        Never assume facts outside the given documents, and do not speculate.
-        Be factual, structured, and neutral.
+        Never assume facts outside the given documents, and do not speculate. Be factual, structured, and neutral.
         """),
         HumanMessage(content=prompt)
     ]
     ai_msg = chat_model.invoke(msgs)
-    return {"answer": ai_msg.content, "chunks": selected_chunks}
+    timings["generation"] = time.time() - t3
+
+    return {
+        "answer": ai_msg.content,
+        "chunks": selected_chunks,
+        "timings": timings
+    }

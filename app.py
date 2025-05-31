@@ -5,7 +5,6 @@ import time
 from rag_core import load_faiss_resources, generate_answer
 import re
 import streamlit as st
-import streamlit.components.v1 as components  # <-- Add this import
 
 # === Load FAISS and metadata once ===
 if "faiss_index" not in st.session_state:
@@ -17,10 +16,11 @@ if "faiss_index" not in st.session_state:
 # --- Set page configuration ---
 st.set_page_config(page_title="IPCC Assistant", page_icon="💬", layout="wide")
 
-# --- Custom CSS ---
+# --- Custom CSS for chat bubbles and sources (applies to st.markdown content) ---
 st.markdown(
     """
     <style>
+    /* Chat‐bubble styling */
     .chat-bubble {
         border-radius: 12px;
         padding: 0.75rem 1rem;
@@ -28,6 +28,8 @@ st.markdown(
         max-width: 70%;
         display: inline-block;
         word-wrap: break-word;
+        font-family: inherit;
+        font-size: 14px;
     }
     .user-bubble {
         background-color: #f6f6f6;
@@ -52,15 +54,14 @@ st.markdown(
     input[type="text"] {
         border: 1px solid #000 !important;
         border-radius: 999px !important;
+        font-family: inherit;
     }
     input[type="text"]:focus {
         border: 2px solid #81C244 !important;
         outline: none !important;
     }
 
-    /* ---------- New CSS for the horizontal sources strip ---------- */
-    /* Note: This CSS is repeated inside the iframe, but having it here means
-       if you ever render via st.markdown it also remains consistent. */
+    /* Sources strip styling */
     .sources-container {
         display: flex;
         flex-direction: row;
@@ -72,28 +73,37 @@ st.markdown(
         border-top: 2px solid #ddd;
     }
     .source-card {
-        display: inline-block;
+        display: inline-flex;
+        flex-direction: column;
+        justify-content: space-between;
         width: 320px;
-        vertical-align: top;
+        min-height: 120px;
         background: #fff;
         margin-right: 12px;
         padding: 12px;
         border: 1px solid #ccc;
         border-radius: 10px;
-        flex-shrink: 0;  /* Prevent cards from shrinking below 320px */
-    }
-    .source-card b {
+        flex-shrink: 0;
+        font-family: inherit;
         font-size: 14px;
-        display: block;
+        line-height: 1.3;
+        overflow-wrap: break-word;
+    }
+    .source-card-header {
+        font-weight: bold;
         margin-bottom: 0.5rem;
     }
-    .source-card p {
+    .source-card-snippet {
+        flex-grow: 1;
+        margin-bottom: 0.5rem;
+    }
+    .source-card-footer {
+        margin-top: 0.5rem;
         font-size: 13px;
-        line-height: 1.2rem;
-        margin: 0.25rem 0;
     }
     .source-card a {
         text-decoration: none;
+        color: #0066cc;
         font-size: 13px;
     }
     </style>
@@ -109,7 +119,7 @@ if "last_sources" not in st.session_state:
 
 # --- Header ---
 st.markdown(
-    """<h1 style="text-align: center; font-size: 50px; margin-bottom: 2rem;">IPCC Assistant</h1>""",
+    """<h1 style="text-align: center; font-size: 50px; margin-bottom: 2rem; font-family: inherit;">IPCC Assistant</h1>""",
     unsafe_allow_html=True,
 )
 
@@ -124,19 +134,19 @@ if question and question.strip():
 for user_msg, bot_msg in st.session_state.chat_history:
 
     def linkify_refs(text):
-        # Turn (1), (2), etc. into clickable anchors (if needed)
-        return re.sub(r"\((\d+)\)", r"([\1](#ref\1))", text)
+        # Turn (1), (2), etc. into clickable anchors
+        return re.sub(r"\((\d+)\)", r"""<a href="#ref\1" style="text-decoration:none;color:#0077cc;">(\1)</a>""", text)
 
-    bot_msg_linked = linkify_refs(bot_msg)
+    bot_msg_html = linkify_refs(bot_msg)
 
-    # Display the user’s message
+    # Display the user’s message and bot’s response
     st.markdown(
         f"""
         <div class="chat-row user-row">
             <div class="chat-bubble user-bubble">{user_msg}</div>
         </div>
         <div class="chat-row bot-row">
-            <div class="chat-bubble bot-bubble">{bot_msg_linked}</div>
+            <div class="chat-bubble bot-bubble">{bot_msg_html}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -238,11 +248,10 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
     st.session_state.last_sources = response["chunks"]
     st.rerun()
 
-# === Collapsible, horizontally scrollable “Sources” strip at the bottom ===
+# === Collapsible, horizontally scrollable “Sources” strip ===
 if st.session_state.last_sources:
-    # Use a native Streamlit expander (arrow icon, collapsible)
     with st.expander("Show Sources", expanded=True):
-        # Build ONE big HTML block (including the CSS) so the <div> nesting is correct
+        # Build ONE big HTML block (including CSS + cards with anchors)
         html = """
         <style>
           .sources-container {
@@ -256,28 +265,37 @@ if st.session_state.last_sources:
             border-top: 2px solid #ddd;
           }
           .source-card {
-            display: inline-block;
+            display: inline-flex;
+            flex-direction: column;
+            justify-content: space-between;
             width: 320px;
-            flex-shrink: 0;
-            vertical-align: top;
+            min-height: 120px;
             background: #fff;
             margin-right: 12px;
             padding: 12px;
             border: 1px solid #ccc;
             border-radius: 10px;
-          }
-          .source-card b {
+            flex-shrink: 0;
+            font-family: inherit;
             font-size: 14px;
-            display: block;
+            line-height: 1.3;
+            overflow-wrap: break-word;
+          }
+          .source-card-header {
+            font-weight: bold;
             margin-bottom: 0.5rem;
           }
-          .source-card p {
+          .source-card-snippet {
+            flex-grow: 1;
+            margin-bottom: 0.5rem;
+          }
+          .source-card-footer {
+            margin-top: 0.5rem;
             font-size: 13px;
-            line-height: 1.2rem;
-            margin: 0.25rem 0;
           }
           .source-card a {
             text-decoration: none;
+            color: #0066cc;
             font-size: 13px;
           }
         </style>
@@ -293,23 +311,32 @@ if st.session_state.last_sources:
             rel = round((score + 10) * 5, 1)
             ref = chunk.get("reference", f"({i+1})")
 
+            # Create an anchor target called "ref{i+1}"
+            html += f'<div class="source-card" id="ref{i+1}">'
+
+            # Header line
+            html += f'<div class="source-card-header">{ref} – {report} – Page {page_number}</div>'
+
+            # Snippet, up to 200 chars
+            snippet = chunk["text"][:200].replace("\n", " ")
+            html += f'<div class="source-card-snippet">{snippet}{"…" if len(chunk["text"]) > 200 else ""}</div>'
+
+            # Footer: relevancy + link
             pdf_url = (
                 "https://www.ipcc.ch/report/ar6/wg3/downloads/report/"
                 "IPCC_AR6_WGIII_FullReport.pdf"
                 f"#page={page_number}"
             )
-            snippet = chunk["text"][:200].replace("\n", " ")
+            html += (
+                f'<div class="source-card-footer">'
+                f'<i>Relevancy: {rel}%</i><br>'
+                f'<a href="{pdf_url}" target="_blank">Open PDF</a>'
+                f'</div>'
+            )
 
-            html += f"""
-            <div class="source-card">
-              <b>{ref} – {report} – Page {page_number}</b>
-              <p>{snippet}{'…' if len(chunk['text']) > 200 else ''}</p>
-              <p><i>Relevancy: {rel}%</i></p>
-              <a href="{pdf_url}" target="_blank">Open PDF</a>
-            </div>
-            """
+            html += "</div>"
 
         html += "</div>"
 
-        # Render the entire HTML block as a single component with fixed height
-        components.html(html, height=260, scrolling=True)
+        # Render it via st.markdown so that anchor links (#refN) work on the same page
+        st.markdown(html, unsafe_allow_html=True)
