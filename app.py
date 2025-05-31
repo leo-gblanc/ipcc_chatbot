@@ -82,6 +82,11 @@ if question and question.strip():
 if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "":
     question = st.session_state.chat_history[-1][0]
 
+    # Memory: up to 2 last Q&A pairs
+    memory = []
+    for user_msg, bot_msg in st.session_state.chat_history[-3:-1]:
+        memory.append({"user": user_msg, "assistant": bot_msg})
+
     with st.spinner("Thinking..."):
         response = generate_answer(
             query=question,
@@ -90,7 +95,8 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "":
             chunk_id_to_info=st.session_state.chunk_id_to_info,
             k=4,
             window=1,
-            rerank_top_n=6
+            rerank_top_n=6,
+            chat_history=memory  # <= enables contextual follow-ups
         )
 
     st.session_state.chat_history[-1] = (question, response["answer"])
@@ -126,7 +132,7 @@ with col2:
         report = meta.get("report_name", "Unknown Report")
         page_number = int(page.replace("page_", "")) if "page_" in page else "?"
         score = chunk.get("reranker_score", 0.0)
-        rel = round((score + 10) * 5, 1)  # Rescaled for display
+        rel = round((score + 10) * 5, 1)
         ref = chunk.get("reference", f"({i+1})")
 
         pdf_url = f"https://www.ipcc.ch/report/ar6/wg3/downloads/report/IPCC_AR6_WGIII_FullReport.pdf#page={page_number}"

@@ -102,7 +102,7 @@ def rerank_chunk_groups(query, chunk_groups, top_n=5):
     return top_groups
 
 # === Generate answer ===
-def generate_answer(query: str, index, chunk_ids, chunk_id_to_info, k: int = 5, window: int = 1, rerank_top_n: int = 6):
+def generate_answer(query: str, index, chunk_ids, chunk_id_to_info, k: int = 5, window: int = 1, rerank_top_n: int = 6, chat_history: list = []):
     context = contextualize_query_with_background(query)
     paraphrases = generate_paraphrases(query)
     queries = [query] + paraphrases
@@ -128,6 +128,14 @@ def generate_answer(query: str, index, chunk_ids, chunk_id_to_info, k: int = 5, 
         chunk["reference"] = ref
         context_text += f"{ref} {chunk['text']}\n\n"
 
+    # Include memory: up to 2 previous Q&A
+    memory_msgs = []
+    for pair in chat_history[-2:]:
+        memory_msgs.extend([
+            HumanMessage(content=pair["user"]),
+            SystemMessage(content=pair["assistant"])
+        ])
+
     prompt = (
         "Use the numbered references in the context to cite where each fact comes from. Ignore any citations like [914] or [6813] that may appear inside the text.\n\n"
         f"Context:\n{context_text}\n\n"
@@ -135,7 +143,7 @@ def generate_answer(query: str, index, chunk_ids, chunk_id_to_info, k: int = 5, 
         "Provide a detailed answer using inline references like (1), (2), etc. to indicate sources."
     )
 
-    msgs = [
+    msgs = memory_msgs + [
         SystemMessage(content="""
         You are an expert assistant specialized in climate change impacts, with a focus on economic consequences such as demand shifts, productivity variations, resource dependencies, and regulatory dynamics.
 
