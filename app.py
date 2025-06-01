@@ -41,11 +41,12 @@ st.markdown(
     <style>
     /* ================= Welcome‐banner styling ================= */
     .welcome-banner {
+        margin: auto;
         max-width: 700px;
         color: #777777;        /* greyed out for discrete look */
         font-family: inherit;
         font-size: 16px;
-        margin: auto;
+        text-align: center;    /* center the welcome text */
         margin-bottom: 2rem;
     }
 
@@ -160,7 +161,6 @@ st.markdown(
         font-family: inherit;
         text-decoration: none;
         display: inline-block;
-        margin-left: 0.5rem;
     }
     .user-guide-btn:hover {
         background-color: #6DAF38;
@@ -298,7 +298,7 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
     placeholder = st.empty()
     streamed = ""
     for para in answer_full.split("\n"):
-        # Append this entire paragraph (with its trailing newline) at once
+        # Append this entire paragraph (with its trailing newline)
         streamed += para + "\n"
 
         # Render the partial text inside a chat bubble
@@ -422,6 +422,7 @@ if st.session_state.last_sources:
 col1, col2 = st.columns([0.85, 0.15])
 
 with col1:
+    # This chat_input is now at the bottom of the page
     question = st.chat_input("Ask something about climate reports…", key="bottom_chat_input")
 
 with col2:
@@ -437,3 +438,45 @@ if question and question.strip():
     # Reset last_timings so we don’t show stale data
     st.session_state.last_timings = None
     st.session_state.chat_history.append((question, "..."))
+
+# ==============================================================================
+# === “MAKE THE INPUT ROW STICKY AT THE BOTTOM” CSS ===
+# ==============================================================================
+st.markdown(
+    """
+    <style>
+    /* 
+      Fix the chat_input form (data-testid="stChatInputForm") to the bottom 
+      and keep it full‐width (85% for the input, 15% for the button). 
+    */
+    [data-testid="stChatInputForm"] {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 85%;                /* match the 0.85 fraction used in the columns above */
+        z-index: 1000;             /* stay on top of other elements */
+        background-color: white;   /* avoid transparency glitches */
+        padding: 1rem;             /* match the gap you’d expect around the input */
+    }
+    /* 
+      Fix our custom “User Guide” link so it sits at the bottom right 
+      of the same row. 
+    */
+    .user-guide-btn {
+        position: fixed;
+        bottom: 0.75rem;            /* align roughly with chat_input’s vertical position */
+        right: 1rem;
+        z-index: 1000;
+    }
+    /* 
+      Add a bit of bottom‐padding to the main content, 
+      so that long conversations / sources don’t disappear behind the fixed bar. 
+    */
+    .block-container {
+        padding-bottom: 6rem;       /* enough space so content can scroll above the bar */
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
