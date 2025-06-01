@@ -223,6 +223,9 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
         chat_history=memory,
     )
 
+    # —— PRINT TIMINGS TO SERVER LOGS ——  
+    print("TIMINGS (seconds):", response.get("timings", {}))
+
     answer_full = response["answer"]
     # Force the progress bar to 100%
     progress_placeholder.markdown(
