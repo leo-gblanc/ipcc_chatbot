@@ -8,7 +8,40 @@ import os
 from sklearn.preprocessing import normalize
 import time  # ← We still need timing
 
-# === Configuration ===
+# ------------------------------------------------------------------------------
+# === EARLY IMPORTS & PATCH FOR TORCH.CLASSES ===
+# ------------------------------------------------------------------------------
+
+# Import torch and the Hugging Face reranker at the top so we can patch the problematic attribute.
+# This ensures Streamlit’s watcher never sees an un‐patched torch.classes.__path__.
+try:
+    import torch
+    # Attempt to access torch.classes.__path__. This often raises the “__path__._path” error.
+    # We catch it and then forcibly override __path__ to an empty list.
+    try:
+        _ = torch.classes.__path__
+    except Exception:
+        pass
+    # Override to prevent further attempts by any watcher to inspect it.
+    torch.classes.__path__ = []
+except ImportError:
+    # In case torch isn't installed, we still want the rest of the file to load.
+    torch = None
+
+# Now import transformers (we can do this unconditionally if torch is available):
+try:
+    from transformers import AutoTokenizer, AutoModelForSequenceClassification
+    # Instantiate the reranker model & tokenizer at module load time.
+    rerank_tokenizer = AutoTokenizer.from_pretrained("BAAI/bge-reranker-base")
+    rerank_model     = AutoModelForSequenceClassification.from_pretrained("BAAI/bge-reranker-base")
+except Exception:
+    # If anything goes wrong (e.g. torch not installed), set them to None.
+    rerank_tokenizer = None
+    rerank_model     = None
+
+# ------------------------------------------------------------------------------
+# === CONFIGURATION & FAISS LOADING ===
+# ------------------------------------------------------------------------------
 
 # Direct links to Google Drive
 FAISS_URL = "https://drive.google.com/uc?export=download&id=1xWcHgAKqUdHug5Eqec0MEE2MfyTVBoId"
@@ -26,18 +59,24 @@ if not os.path.exists(METADATA_PATH):
     urllib.request.urlretrieve(META_URL, METADATA_PATH)
     print("✅ Metadata downloaded.")
 
-# === Load FAISS index and metadata ===
+# Load FAISS index and metadata
 def load_faiss_resources():
     index = faiss.read_index(FAISS_INDEX_PATH)
     with open(METADATA_PATH, "rb") as f:
         meta = pickle.load(f)
     return index, meta["chunk_ids"], meta["chunk_id_to_info"]
 
-# === Initialize embedding & chat models (no torch here) ===
+# ------------------------------------------------------------------------------
+# === EMBEDDING & CHAT MODEL INITIALIZATION ===
+# ------------------------------------------------------------------------------
+
 embedder   = DatabricksEmbeddings(endpoint="databricks-gte-large-en", batch_size=1)
 chat_model = ChatDatabricks(endpoint="databricks-claude-3-7-sonnet", max_tokens=2048, temperature=0.1)
 
-# === Contextualize and paraphrase (no torch) ===
+# ------------------------------------------------------------------------------
+# === CONTEXTUALIZATION & PARAPHRASE FUNCTIONS ===
+# ------------------------------------------------------------------------------
+
 def contextualize_query_with_background(query: str) -> str:
     prompt = """
     You are a domain expert in climate change mitigation (IPCC WGIII).
@@ -59,7 +98,10 @@ def generate_paraphrases(query: str) -> list:
     response = chat_model.invoke([SystemMessage(content=prompt), HumanMessage(content=query)])
     return [line.strip() for line in response.content.strip().split("\n") if line.strip()]
 
-# === FAISS retrieval with neighbors (no torch) ===
+# ------------------------------------------------------------------------------
+# === FAISS RETRIEVAL ===
+# ------------------------------------------------------------------------------
+
 def faiss_similarity_search_groups(query: str, index, chunk_ids, chunk_id_to_info, k: int = 5, window: int = 1):
     query_vector = embedder.embed_query(query)
     query_vector = np.array([query_vector], dtype="float32")
@@ -85,37 +127,45 @@ def faiss_similarity_search_groups(query: str, index, chunk_ids, chunk_id_to_inf
             chunk_groups.append(group)
     return chunk_groups
 
-# === Rerank chunk groups (lazy‐load torch + HF model inside this function) ===
+# ------------------------------------------------------------------------------
+# === RERANK FUNCTION (now uses top‐level rerank_model & rerank_tokenizer) ===
+# ------------------------------------------------------------------------------
+
 def rerank_chunk_groups(query, chunk_groups, top_n=5):
-    # Import torch and transformers only when this function is called, to avoid error caused by Streamlit’s watcher
-    import torch
-    from transformers import AutoTokenizer, AutoModelForSequenceClassification
+    """
+    Uses the pre‐loaded `rerank_model` and `rerank_tokenizer` from the module‐load phase.
+    Since `torch.classes.__path__` was patched above, the watcher will not error out.
+    """
+    if rerank_model is None or rerank_tokenizer is None:
+        # If for some reason loading failed, just return the unranked groups:
+        return chunk_groups
 
-    # Instantiate tokenizer & model here (inside the function)
-    tokenizer = AutoTokenizer.from_pretrained("BAAI/bge-reranker-base")
-    model     = AutoModelForSequenceClassification.from_pretrained("BAAI/bge-reranker-base")
-
-    # Build inputs for scoring
+    # Build inputs for reranking
     inputs = [
         f"{query} [SEP] " + " ".join(chunk["text"] for chunk in group)
         for group in chunk_groups
     ]
-    tokens = tokenizer(inputs, padding=True, truncation=True, return_tensors="pt")
+    tokens = rerank_tokenizer(inputs, padding=True, truncation=True, return_tensors="pt")
 
+    # Compute scores
     with torch.no_grad():
-        scores = model(**tokens).logits.squeeze(-1)
+        scores = rerank_model(**tokens).logits.squeeze(-1)
 
     # Select top_n groups by score
     top_indices = torch.topk(scores, k=min(top_n, len(chunk_groups))).indices.tolist()
     top_groups  = [chunk_groups[i] for i in top_indices]
 
+    # Attach reranker_score to each chunk
     for i, idx in enumerate(top_indices):
         for chunk in top_groups[i]:
             chunk["reranker_score"] = round(scores[idx].item(), 4)
 
     return top_groups
 
-# === Generate answer with timing measurements ===
+# ------------------------------------------------------------------------------
+# === GENERATE_ANSWER WITH TIMING ===
+# ------------------------------------------------------------------------------
+
 def generate_answer(query: str,
                     index,
                     chunk_ids,
@@ -152,7 +202,6 @@ def generate_answer(query: str,
                 seen_ids.add(ids)
                 all_groups.append(group)
 
-    # **Rerank** (this will import torch inside the function)
     top_groups = rerank_chunk_groups(query, all_groups, top_n=rerank_top_n)
     timings["retrieval_and_rerank"] = time.time() - t2
 
@@ -165,9 +214,9 @@ def generate_answer(query: str,
         chunk["reference"] = ref
         context_text += f"{ref} {chunk['text']}\n\n"
 
-    # Include memory: up to 2 previous Q&A
+    # Include memory: up to 1 previous Q&A
     memory_msgs = []
-    for pair in chat_history[-2:]:
+    for pair in chat_history[-1:]:
         memory_msgs.extend([
             HumanMessage(content=pair["user"]),
             SystemMessage(content=pair["assistant"])
