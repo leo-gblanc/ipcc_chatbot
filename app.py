@@ -20,7 +20,7 @@ if "last_timings" not in st.session_state:
 # --- Set page configuration ---
 st.set_page_config(page_title="IPCC Assistant", page_icon="💬", layout="wide")
 
-# --- Custom CSS for chat bubbles, timing bubble, and source-cards ---
+# --- Custom CSS for chat-bubbles, timing bubble, and source-cards ---
 st.markdown(
     """
     <style>
@@ -95,9 +95,9 @@ st.markdown(
         flex-direction: column;
         justify-content: flex-start;
         width: 320px;
-        min-height: 180px;            /* ← Fixed card height */
-        max-height: 180px;
-        overflow: hidden;             /* ← Clip anything beyond */
+        min-height: 200px;            /* ← Increased card height from 180→200 */
+        max-height: 200px;
+        overflow: hidden;             /* ← Clip overflow */
         background: #fff;
         margin-right: 12px;
         padding: 12px;
@@ -106,7 +106,7 @@ st.markdown(
         flex-shrink: 0;
         font-family: inherit;
         font-size: 14px;
-        line-height: 1.3;
+        line-height: 1.35;
     }
 
     .source-card-header {
@@ -115,16 +115,32 @@ st.markdown(
     }
 
     .source-card-snippet {
-        /* Let snippet wrap, but constrain its height so footer remains visible */
-        max-height: 100px;       /* ← (≈180px card – header ~20 – footer ~40 – padding ~20) */
-        overflow: hidden;        /* ← Clip overflow text */
+        /* Let snippet wrap, but constrain its height so footer always visible */
+        max-height: 120px;        /* ← Increased snippet max-height accordingly */
+        overflow: hidden;         /* ← Clip overflowed snippet text */
         margin-bottom: 0.5rem;
         white-space: normal;
     }
 
+    /* The "Show more" details will expand beyond snippet area */
+    .source-card details {
+        margin-top: 0.25rem;
+        font-size: 13px;
+    }
+    .source-card summary {
+        cursor: pointer;
+        font-weight: bold;
+    }
+
+    .source-card-snippet-full {
+        font-size: 14px;
+        line-height: 1.35;
+        margin-top: 0.5rem;
+    }
+
     .source-card-footer {
         font-size: 13px;
-        margin-top: auto;        /* ← Push footer to bottom of card */
+        margin-top: auto;        /* ← Push footer to bottom */
     }
 
     .source-card a {
@@ -156,15 +172,16 @@ question = st.chat_input("Ask something about climate reports...")
 if question and question.strip():
     # Reset last_timings so we don’t show stale data
     st.session_state.last_timings = None
-    st.session_state.chat_history.append((question, "..."))  # Placeholder for streaming
+    st.session_state.chat_history.append((question, "..."))  # placeholder
 
 # === Chat display ===
 for user_msg, bot_msg in st.session_state.chat_history:
 
     def linkify_refs(text):
         """
-        Find any “(6)”, “(11)”, or “(6, 11)”, etc. and turn each number into its own clickable anchor.
-        E.g. '(6, 11)' → '<a href="#ref6">(6)</a> <a href="#ref11">(11)</a>'.
+        Find any “(6)”, “(11)”, or “(6, 11)”, etc. and turn each number
+        into its own clickable anchor. E.g. '(6, 11)' → 
+        '<a href="#ref6">(6)</a> <a href="#ref11">(11)</a>'.
         """
         def _replace(match):
             nums = match.group(1).split(",")
@@ -208,9 +225,9 @@ if st.session_state.last_timings is not None:
         <div class="chat-row bot-row">
             <div class="timing-bubble">
                 ⏱ Contextualization: {t.get('contextualization', 0):.2f}s<br>
-                ⏱ Paraphrase Gen: {t.get('paraphrase_generation', 0):.2f}s<br>
-                ⏱ Retrieval+Rerank: {t.get('retrieval_and_rerank', 0):.2f}s<br>
-                ⏱ LLM Generation: {t.get('generation', 0):.2f}s
+                ⏱ Paraphrase Gen:     {t.get('paraphrase_generation', 0):.2f}s<br>
+                ⏱ Retrieval+Rerank:   {t.get('retrieval_and_rerank', 0):.2f}s<br>
+                ⏱ LLM Generation:     {t.get('generation', 0):.2f}s
             </div>
         </div>
         """,
@@ -273,9 +290,9 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
 
 # === Collapsible, horizontally scrollable “Sources” strip ===
 if st.session_state.last_sources:
-    # expander collapsed by default (expanded=False)
+    # Expander collapsed by default (expanded=False)
     with st.expander("Show Sources", expanded=False):
-        # Build ONE big HTML block (including CSS + cards with anchors)
+        # Build ONE big HTML block (including CSS + cards + <details>)
         html = """
         <style>
           .sources-container {
@@ -294,9 +311,9 @@ if st.session_state.last_sources:
             flex-direction: column;
             justify-content: flex-start;
             width: 320px;
-            min-height: 180px;       /* ← Fixed height */
-            max-height: 180px;
-            overflow: hidden;        /* ← Clip any overflow text */
+            min-height: 200px;       /* ← Increased card height */
+            max-height: 200px;
+            overflow: hidden;        /* ← Clip any overflow */
             background: #fff;
             margin-right: 12px;
             padding: 12px;
@@ -305,21 +322,34 @@ if st.session_state.last_sources:
             flex-shrink: 0;
             font-family: inherit;
             font-size: 14px;
-            line-height: 1.3;
+            line-height: 1.35;
           }
           .source-card-header {
             font-weight: bold;
             margin-bottom: 0.5rem;
           }
           .source-card-snippet {
-            max-height: 100px;       /* ← Ensure footer below is always visible */
-            overflow: hidden;        /* ← Clip any snippet spillover */
+            max-height: 120px;       /* ← Ensure footer below remains visible */
+            overflow: hidden;        /* ← Clip any extra lines */
             margin-bottom: 0.5rem;
-            white-space: normal;     /* ← Allow the snippet to wrap onto multiple lines */
+            white-space: normal;     /* ← Allow wrapping */
+          }
+          .source-card details {
+            margin-top: 0.25rem;
+            font-size: 13px;
+          }
+          .source-card summary {
+            cursor: pointer;
+            font-weight: bold;
+          }
+          .source-card-snippet-full {
+            font-size: 14px;
+            line-height: 1.35;
+            margin-top: 0.5rem;
           }
           .source-card-footer {
             font-size: 13px;
-            margin-top: auto;       /* ← Push footer to bottom */
+            margin-top: auto;       /* ← Push footer to very bottom */
           }
           .source-card a {
             text-decoration: none;
@@ -345,12 +375,23 @@ if st.session_state.last_sources:
             # Header line
             html += f'<div class="source-card-header">{ref} – {report} – Page {page_number}</div>'
 
-            # Snippet (max ~400 chars), allowing multiple lines up to 100px
+            # Snippet (max ~400 chars), allowing multiple lines up to ~120px
             raw_text = chunk["text"]
-            snippet = raw_text[:400].replace("\n", " ")
+            truncated = raw_text[:400].replace("\n", " ")
             if len(raw_text) > 400:
-                snippet = snippet.rstrip() + "…"
-            html += f'<div class="source-card-snippet">{snippet}</div>'
+                truncated = truncated.rstrip() + "…"
+            html += f'<div class="source-card-snippet">{truncated}</div>'
+
+            # If we did truncate, add a <details> so user can “Show more”
+            if len(raw_text) > 400:
+                # Show the full chunk within a details/summary block
+                escaped_full = raw_text.replace("<", "&lt;").replace(">", "&gt;")
+                html += (
+                    '<details>'
+                    '<summary>Show more</summary>'
+                    f'<div class="source-card-snippet-full">{escaped_full}</div>'
+                    '</details>'
+                )
 
             # Footer: relevancy + link
             pdf_url = (
