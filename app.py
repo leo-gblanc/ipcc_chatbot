@@ -6,21 +6,35 @@ from rag_core import load_faiss_resources, generate_answer
 import re
 import streamlit as st
 
-# === Load FAISS and metadata once ===
+# ==============================================================================
+# === CONSTANTS ===
+# ==============================================================================
+# We assume `user_guide.pdf` is placed at the root of this repo.
+USER_GUIDE_URL = "user_guide.pdf"
+
+# ==============================================================================
+# === LOAD FAISS + METADATA ONCE ===
+# ==============================================================================
 if "faiss_index" not in st.session_state:
     index, chunk_ids, chunk_id_to_info = load_faiss_resources()
     st.session_state.faiss_index = index
     st.session_state.chunk_ids = chunk_ids
     st.session_state.chunk_id_to_info = chunk_id_to_info
 
-# --- Initialize storage for timings (if not already set) ---
+# ==============================================================================
+# === INITIALIZE STORAGE FOR TIMINGS ===
+# ==============================================================================
 if "last_timings" not in st.session_state:
     st.session_state.last_timings = None
 
-# --- Set page configuration ---
-st.set_page_config(page_title="IPCC Assistant", page_icon="💬", layout="wide")
+# ==============================================================================
+# === STREAMLIT PAGE CONFIGURATION ===
+# ==============================================================================
+st.set_page_config(page_title="Climate Impact Assistant", page_icon="💬", layout="wide")
 
-# --- Custom CSS for chat‐bubbles, timing bubble, and source‐cards ---
+# ==============================================================================
+# === GLOBAL CSS STYLING ===
+# ==============================================================================
 st.markdown(
     """
     <style>
@@ -110,9 +124,9 @@ st.markdown(
     }
     .source-card-snippet {
         flex-grow: 1;
-        overflow-y: auto;         /* Enable vertical scrolling */
+        overflow-y: auto;         /* Enables vertical scrolling inside the card */
         margin-bottom: 0.5rem;
-        white-space: normal;      /* Allow the text to wrap */
+        white-space: normal;      /* Allow wrapping */
     }
     .source-card-footer {
         font-size: 13px;
@@ -123,38 +137,88 @@ st.markdown(
         color: #0066cc;
         font-size: 13px;
     }
+
+    /* ================= User‐Guide Button styling ================= */
+    .user-guide-btn {
+        background-color: #81C244;
+        color: white !important;
+        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
+        text-align: center;
+        font-size: 14px;
+        font-family: inherit;
+        text-decoration: none;
+        display: inline-block;
+        margin-top: 0.25rem;
+    }
+    .user-guide-btn:hover {
+        background-color: #6DAF38;
+        color: white !important;
+    }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# --- Initialize session state for chat history & sources ---
+# ==============================================================================
+# === INITIALIZE SESSION STATE FOR HISTORY & SOURCES ===
+# ==============================================================================
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "last_sources" not in st.session_state:
     st.session_state.last_sources = []
 
-# --- Header ---
+# ==============================================================================
+# === HEADER & WELCOME BANNER ===
+# ==============================================================================
 st.markdown(
-    """<h1 style="text-align: center; font-size: 50px; margin-bottom: 2rem; font-family: inherit;">IPCC Assistant</h1>""",
+    """<h1 style="text-align: center; font-size: 50px; margin-bottom: 1rem; font-family: inherit;">
+    Climate Impact Assistant</h1>""",
     unsafe_allow_html=True,
 )
 
-# --- Chat input (appears at bottom) ---
-question = st.chat_input("Ask something about climate reports...")
+st.markdown(
+    """
+    **Welcome to the Climate Impact Assistant!**
+    Ask me how different climate scenarios affect sectors like energy, transport, or agriculture.
+    I provide clear, sourced answers on risks, strategies, and impacts across industries.
+    You can explore anything from technologies to policy options.
+    Need help? Check the user guide in the bottom right corner.
+    """,
+    unsafe_allow_html=True,
+)
 
-# === Submit new question ===
+# ==============================================================================
+# === INPUT ROW: CHAT_INPUT + “User Guide” BUTTON ===
+# ==============================================================================
+col1, col2 = st.columns([0.85, 0.15])
+
+with col1:
+    question = st.chat_input("Ask something about climate reports…", key="chat_input")
+
+with col2:
+    st.markdown(
+        f'<a href="{USER_GUIDE_URL}" target="_blank" class="user-guide-btn">User Guide</a>',
+        unsafe_allow_html=True,
+    )
+
+# ==============================================================================
+# === SUBMIT NEW QUESTION ===
+# ==============================================================================
 if question and question.strip():
     # Reset last_timings so we don’t show stale data
     st.session_state.last_timings = None
-    st.session_state.chat_history.append((question, "..."))  # Placeholder for streaming
+    st.session_state.chat_history.append((question, "..."))
 
-# === Chat display ===
+# ==============================================================================
+# === CHAT DISPLAY (SHOW HISTORY) ===
+# ==============================================================================
 for user_msg, bot_msg in st.session_state.chat_history:
 
     def linkify_refs(text):
         """
-        Find any '(6)', '(11)', or '(6, 11)', etc., and turn each number into its own clickable anchor.
+        Find any '(6)', '(11)', or '(6, 11)' etc., 
+        and turn each number into its own clickable anchor.
         E.g. '(6, 11)' → '<a href="#ref6">(6)</a> <a href="#ref11">(11)</a>'.
         """
         def _replace(match):
@@ -191,26 +255,30 @@ for user_msg, bot_msg in st.session_state.chat_history:
         unsafe_allow_html=True,
     )
 
-# If we have stored timings, render them once as a “timing‐bubble”
-if st.session_state.last_timings is not None:
-    t = st.session_state.last_timings
-    st.markdown(
-        f"""
-        <div class="chat-row bot-row">
-            <div class="timing-bubble">
-                ⏱ Contextualization: {t.get('contextualization', 0):.2f}s<br>
-                ⏱ Paraphrase Gen: {t.get('paraphrase_generation', 0):.2f}s<br>
-                ⏱ Retrieval+Rerank: {t.get('retrieval_and_rerank', 0):.2f}s<br>
-                ⏱ LLM Generation: {t.get('generation', 0):.2f}s
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    # Clear so it only shows once
-    st.session_state.last_timings = None
+# ==============================================================================
+# === TIMING BUBBLE (uncomment if wanted) ===
+# ==============================================================================
+# if st.session_state.last_timings is not None:
+#     t = st.session_state.last_timings
+#     st.markdown(
+#         f"""
+#         <div class="chat-row bot-row">
+#             <div class="timing-bubble">
+#                 ⏱ Contextualization: {t.get('contextualization', 0):.2f}s<br>
+#                 ⏱ Paraphrase Gen: {t.get('paraphrase_generation', 0):.2f}s<br>
+#                 ⏱ Retrieval+Rerank: {t.get('retrieval_and_rerank', 0):.2f}s<br>
+#                 ⏱ LLM Generation: {t.get('generation', 0):.2f}s
+#             </div>
+#         </div>
+#         """,
+#         unsafe_allow_html=True,
+#     )
+#     # Clear so it only shows once
+#     st.session_state.last_timings = None
 
-# === Generate response logic (wrapped in a spinner) ===
+# ==============================================================================
+# === GENERATE RESPONSE LOGIC (WITH SPINNER) ===
+# ==============================================================================
 if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "...":
     question = st.session_state.chat_history[-1][0]
 
@@ -262,7 +330,9 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
     st.session_state.last_sources = response["chunks"]
     st.rerun()
 
-# === Collapsible, horizontally scrollable “Sources” strip ===
+# ==============================================================================
+# === COLLAPSIBLE, HORIZONTALLY SCROLLABLE “SOURCES” STRIP ===
+# ==============================================================================
 if st.session_state.last_sources:
     # Expander collapsed by default (expanded=False)
     with st.expander("Show Sources", expanded=False):
@@ -301,7 +371,7 @@ if st.session_state.last_sources:
           }
           .source-card-snippet {
             flex-grow: 1;
-            overflow-y: auto;         /* Enables vertical scrolling */
+            overflow-y: auto;         /* Enables vertical scrolling inside the card */
             margin-bottom: 0.5rem;
             white-space: normal;      /* Allow wrapping */
           }
@@ -330,14 +400,14 @@ if st.session_state.last_sources:
             # Each card has an anchor ID "ref{i+1}" so the inline link can jump here
             html += f'<div class="source-card" id="ref{i+1}">'
 
-            # Header line
+            # Header
             html += f'<div class="source-card-header">{ref} – {report} – Page {page_number}</div>'
 
-            # FULL chunk text (no truncation), wrapped under a scrollable snippet box
+            # FULL chunk text (no truncation), scrollable
             raw_text = chunk["text"].replace("\n", " ")
             html += f'<div class="source-card-snippet">{raw_text}</div>'
 
-            # Footer: relevancy + link
+            # Footer: relevancy & PDF link
             pdf_url = (
                 "https://www.ipcc.ch/report/ar6/wg3/downloads/report/"
                 "IPCC_AR6_WGIII_FullReport.pdf"
