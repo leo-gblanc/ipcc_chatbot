@@ -191,11 +191,17 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- “User Guide” link below the welcome message ---
+# ==============================================================================
+# === “User Guide” link below the welcome message ===
+# ==============================================================================
+# Google Drive share link converted to “uc?export=download” form:
+
+USER_GUIDE_URL = f"https://drive.google.com/file/d/1dPyUsL-KLFHNDf09ML3Q4LYVvr5lhA1Q/view"
+
 st.markdown(
-    """
+    f"""
     <div class="user-guide-link">
-        <a href="/static/user_guide.pdf" target="_blank">📄 View the User Guide</a>
+        <a href="{USER_GUIDE_URL}" target="_blank">📄 View the User Guide</a>
     </div>
     """,
     unsafe_allow_html=True,
