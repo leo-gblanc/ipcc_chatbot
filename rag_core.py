@@ -6,7 +6,8 @@ from langchain.schema import SystemMessage, HumanMessage
 import urllib.request
 import os
 from sklearn.preprocessing import normalize
-import time  # ← We still need timing
+import time
+
 
 # ------------------------------------------------------------------------------
 # === EARLY IMPORTS & PATCH FOR TORCH.CLASSES ===
@@ -22,13 +23,13 @@ try:
         _ = torch.classes.__path__
     except Exception:
         pass
-    # Override to prevent further attempts by any watcher to inspect it.
+    # Overwrite __path__ to avoid Streamlit‐watcher errors
     torch.classes.__path__ = []
 except ImportError:
     # In case torch isn't installed, we still want the rest of the file to load.
     torch = None
 
-# Now import transformers (we can do this unconditionally if torch is available):
+# Now import transformers (safe because torch.classes was patched above)
 try:
     from transformers import AutoTokenizer, AutoModelForSequenceClassification
     # Instantiate the reranker model & tokenizer at module load time.
@@ -39,11 +40,10 @@ except Exception:
     rerank_tokenizer = None
     rerank_model     = None
 
+
 # ------------------------------------------------------------------------------
 # === CONFIGURATION & FAISS LOADING ===
 # ------------------------------------------------------------------------------
-
-# Direct links to Google Drive
 FAISS_URL = "https://drive.google.com/uc?export=download&id=1xWcHgAKqUdHug5Eqec0MEE2MfyTVBoId"
 META_URL  = "https://drive.google.com/uc?export=download&id=1DcG89F5hRGRs0Oe6YO4kB83Lq4rOsF3D"
 
@@ -66,17 +66,17 @@ def load_faiss_resources():
         meta = pickle.load(f)
     return index, meta["chunk_ids"], meta["chunk_id_to_info"]
 
+
 # ------------------------------------------------------------------------------
 # === EMBEDDING & CHAT MODEL INITIALIZATION ===
 # ------------------------------------------------------------------------------
-
 embedder   = DatabricksEmbeddings(endpoint="databricks-gte-large-en", batch_size=1)
 chat_model = ChatDatabricks(endpoint="databricks-claude-3-7-sonnet", max_tokens=2048, temperature=0.1)
+
 
 # ------------------------------------------------------------------------------
 # === CONTEXTUALIZATION & PARAPHRASE FUNCTIONS ===
 # ------------------------------------------------------------------------------
-
 def contextualize_query_with_background(query: str) -> str:
     prompt = """
     You are a domain expert in climate change mitigation (IPCC WGIII).
@@ -86,7 +86,8 @@ def contextualize_query_with_background(query: str) -> str:
     - Relevant technical terms used in IPCC reports
     Return 2-3 sentences.
     """
-    response = chat_model.invoke([SystemMessage(content=prompt), HumanMessage(content=query)])
+    response = chat_model.invoke([SystemMessage(content=prompt),
+                                  HumanMessage(content=query)])
     return response.content.strip()
 
 def generate_paraphrases(query: str) -> list:
@@ -95,14 +96,22 @@ def generate_paraphrases(query: str) -> list:
     using terminology common in IPCC WGIII reports.
     Return one paraphrase per line.
     """
-    response = chat_model.invoke([SystemMessage(content=prompt), HumanMessage(content=query)])
+    response = chat_model.invoke([SystemMessage(content=prompt),
+                                  HumanMessage(content=query)])
     return [line.strip() for line in response.content.strip().split("\n") if line.strip()]
+
 
 # ------------------------------------------------------------------------------
 # === FAISS RETRIEVAL ===
 # ------------------------------------------------------------------------------
-
-def faiss_similarity_search_groups(query: str, index, chunk_ids, chunk_id_to_info, k: int = 5, window: int = 1):
+def faiss_similarity_search_groups(
+    query: str,
+    index,
+    chunk_ids,
+    chunk_id_to_info,
+    k: int = 5,
+    window: int = 1
+):
     query_vector = embedder.embed_query(query)
     query_vector = np.array([query_vector], dtype="float32")
     faiss.normalize_L2(query_vector)
@@ -127,17 +136,17 @@ def faiss_similarity_search_groups(query: str, index, chunk_ids, chunk_id_to_inf
             chunk_groups.append(group)
     return chunk_groups
 
-# ------------------------------------------------------------------------------
-# === RERANK FUNCTION (now uses top‐level rerank_model & rerank_tokenizer) ===
-# ------------------------------------------------------------------------------
 
+# ------------------------------------------------------------------------------
+# === RERANK FUNCTION (uses top‐level rerank_model & rerank_tokenizer) ===
+# ------------------------------------------------------------------------------
 def rerank_chunk_groups(query, chunk_groups, top_n=5):
     """
-    Uses the pre‐loaded `rerank_model` and `rerank_tokenizer` from the module‐load phase.
-    Since `torch.classes.__path__` was patched above, the watcher will not error out.
+    Uses the pre-loaded `rerank_model` and `rerank_tokenizer` from module load.
+    Because we patched `torch.classes.__path__` above, Streamlit’s watcher will not trip.
     """
     if rerank_model is None or rerank_tokenizer is None:
-        # If for some reason loading failed, just return the unranked groups:
+        # If something went wrong loading HF, skip reranking
         return chunk_groups
 
     # Build inputs for reranking
@@ -162,18 +171,20 @@ def rerank_chunk_groups(query, chunk_groups, top_n=5):
 
     return top_groups
 
-# ------------------------------------------------------------------------------
-# === GENERATE_ANSWER WITH TIMING ===
-# ------------------------------------------------------------------------------
 
-def generate_answer(query: str,
-                    index,
-                    chunk_ids,
-                    chunk_id_to_info,
-                    k: int = 5,
-                    window: int = 1,
-                    rerank_top_n: int = 6,
-                    chat_history: list = []):
+# ------------------------------------------------------------------------------
+# === GENERATE_ANSWER WITH TIMING & “RELEVANCE CHECK” ===
+# ------------------------------------------------------------------------------
+def generate_answer(
+    query: str,
+    index,
+    chunk_ids,
+    chunk_id_to_info,
+    k: int = 5,
+    window: int = 1,
+    rerank_top_n: int = 6,
+    chat_history: list = []
+):
     timings = {}
 
     # 1) Contextualization
@@ -195,7 +206,9 @@ def generate_answer(query: str,
     all_groups = []
     seen_ids = set()
     for q in enriched_queries:
-        groups = faiss_similarity_search_groups(q, index, chunk_ids, chunk_id_to_info, k=k, window=window)
+        groups = faiss_similarity_search_groups(
+            q, index, chunk_ids, chunk_id_to_info, k=k, window=window
+        )
         for group in groups:
             ids = tuple(chunk["chunk_id"] for chunk in group)
             if ids not in seen_ids:
@@ -205,42 +218,31 @@ def generate_answer(query: str,
     top_groups = rerank_chunk_groups(query, all_groups, top_n=rerank_top_n)
     timings["retrieval_and_rerank"] = time.time() - t2
 
+    # Flatten into a single list of “selected_chunks”
     selected_chunks = [chunk for group in top_groups for chunk in group]
 
-    # Tag chunks with inline references (1), (2), ...
+    # Tag chunks with inline references (1), (2), …
     context_text = ""
     for i, chunk in enumerate(selected_chunks):
         ref = f"({i+1})"
         chunk["reference"] = ref
         context_text += f"{ref} {chunk['text']}\n\n"
 
-    # Include memory: up to 1 previous Q&A
-    memory_msgs = []
-    for pair in chat_history[-1:]:
-        memory_msgs.extend([
-            HumanMessage(content=pair["user"]),
-            SystemMessage(content=pair["assistant"])
-        ])
-
-    prompt = (
-        "Use the numbered references in the context to cite where each fact comes from. "
-        "Ignore any citations like [914] or [6813] that may appear inside the text.\n\n"
-        f"Context:\n{context_text}\n\n"
-        f"Question: {query}\n\n"
-        "Provide a detailed answer using inline references like (1), (2), etc. to indicate sources."
-    )
-
-    # 4) Final LLM generation
+    # 4) Build the “combined prompt” that includes:
+    #    • A “relevance check” system instruction
+    #    • System instructions
+    #    • (If it exists) a tiny “past‐conversation” snippet
+    #    • The new question + retrieved context
     t3 = time.time()
 
-    # Insert a brief “relevance check” instruction so Claude only uses memory if helpful:
+    # 4a) Relevance‐check instruction
     relevance_check = SystemMessage(content="""
-    Before using the previous conversation, ask yourself:
+    Before using any previous conversation turns, ask yourself:
     “Is that prior user question and my prior answer directly relevant to this new question?”
     If it is not, ignore it entirely and answer based only on the current question and the provided context.
     """)
 
-    # Then keep your existing system instructions exactly as before:
+    # 4b) The “core” system prompt
     existing_system = SystemMessage(content="""
     You are an expert assistant specialized in climate change impacts, with a focus on economic consequences 
     such as demand shifts, productivity variations, resource dependencies, and regulatory dynamics.
@@ -257,14 +259,43 @@ def generate_answer(query: str,
     Never assume facts outside the given documents, and do not speculate. Be factual, structured, and neutral.
     """)
 
-    # Put all system messages first, then memory, then the user prompt
+    # 4c) If we have a “last conversation” (just the final turn), merge it into one snippet:
+    if chat_history:
+        last_user, last_assistant = chat_history[-1]["user"], chat_history[-1]["assistant"]
+        # We do NOT pass them as separate ChatDatabricks messages.
+        # Instead, we embed them as plain text inside the USER prompt, below:
+        past_snippet = (
+            "Previous conversation:\n"
+            f"User: {last_user}\n"
+            f"Assistant: {last_assistant}\n\n"
+        )
+    else:
+        past_snippet = ""
+
+    # 4d) Now build the single HumanMessage that contains:
+    #     • the past conversation (if any),
+    #     • the retrieved “context_text,”
+    #     • the new question
+    #     • plus an instruction to cite inline references (1), (2), etc.
+    prompt = (
+        f"{past_snippet}"
+        "Context:\n"
+        f"{context_text}\n"
+        f"Question: {query}\n\n"
+        "Provide a detailed answer using inline references like (1), (2), etc. to indicate sources."
+    )
+
+    # 4e) Assemble final message list:
+    #     1) relevance_check (System)
+    #     2) existing_system  (System)
+    #     3) a single HumanMessage that bundles past_snippet + context + question
     msgs = [
         relevance_check,
-        existing_system
-    ] + memory_msgs + [
+        existing_system,
         HumanMessage(content=prompt)
     ]
 
+    # Invoke the model:
     ai_msg = chat_model.invoke(msgs)
     timings["generation"] = time.time() - t3
 
