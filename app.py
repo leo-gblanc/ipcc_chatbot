@@ -6,50 +6,24 @@ from rag_core import load_faiss_resources, generate_answer
 import re
 import streamlit as st
 
-# ==============================================================================
-# === CONSTANTS ===
-# ==============================================================================
-# We assume `user_guide.pdf` is placed at the root of this repo.
-# On Streamlit Cloud, files in the repo root are served at "/<filename>".
-USER_GUIDE_URL = "/user_guide.pdf"
-
-# ==============================================================================
-# === LOAD FAISS + METADATA ONCE ===
-# ==============================================================================
+# === Load FAISS and metadata once ===
 if "faiss_index" not in st.session_state:
     index, chunk_ids, chunk_id_to_info = load_faiss_resources()
     st.session_state.faiss_index = index
     st.session_state.chunk_ids = chunk_ids
     st.session_state.chunk_id_to_info = chunk_id_to_info
 
-# ==============================================================================
-# === INITIALIZE STORAGE FOR TIMINGS ===
-# ==============================================================================
+# --- Initialize storage for timings (if not already set) ---
 if "last_timings" not in st.session_state:
     st.session_state.last_timings = None
 
-# ==============================================================================
-# === STREAMLIT PAGE CONFIGURATION ===
-# ==============================================================================
-st.set_page_config(page_title="Climate Impact Assistant", page_icon="💬", layout="wide")
+# --- Set page configuration ---
+st.set_page_config(page_title="IPCC Assistant", page_icon="💬", layout="wide")
 
-# ==============================================================================
-# === GLOBAL CSS STYLING ===
-# ==============================================================================
+# --- Custom CSS for chat‐bubbles, timing bubble, and source‐cards ---
 st.markdown(
     """
     <style>
-    /* ================= Welcome‐banner styling ================= */
-    .welcome-banner {
-        margin: auto;
-        max-width: 700px;
-        color: #777777;        /* greyed out for discrete look */
-        font-family: inherit;
-        font-size: 16px;
-        text-align: center;    /* center the welcome text */
-        margin-bottom: 2rem;
-    }
-
     /* ================= Chat‐bubble styling ================= */
     .chat-bubble {
         border-radius: 12px;
@@ -136,9 +110,9 @@ st.markdown(
     }
     .source-card-snippet {
         flex-grow: 1;
-        overflow-y: auto;         /* Enables vertical scrolling inside the card */
+        overflow-y: auto;         /* Enable vertical scrolling */
         margin-bottom: 0.5rem;
-        white-space: normal;      /* Allow wrapping */
+        white-space: normal;      /* Allow the text to wrap */
     }
     .source-card-footer {
         font-size: 13px;
@@ -149,65 +123,87 @@ st.markdown(
         color: #0066cc;
         font-size: 13px;
     }
-
-    /* ================= User‐Guide Button styling ================= */
-    .user-guide-btn {
-        background-color: #81C244;
-        color: white !important;
-        padding: 0.5rem 0.75rem;
-        border-radius: 8px;
-        text-align: center;
-        font-size: 14px;
+    
+    /* ================= Welcome‐banner styling ================= */
+    .welcome-banner {
+        max-width: 700px;
+        color: #777777;          /* greyed out for discrete look */
         font-family: inherit;
-        text-decoration: none;
-        display: inline-block;
+        font-size: 16px;
+        text-align: center;      /* center the welcome text */
+        margin: auto;
+        margin-bottom: 1rem;
     }
-    .user-guide-btn:hover {
-        background-color: #6DAF38;
-        color: white !important;
+    
+    /* ================= User Guide link styling ================= */
+    .user-guide-link {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .user-guide-link a {
+        color: #0066cc;
+        font-size: 16px;
+        text-decoration: none;
+    }
+    .user-guide-link a:hover {
+        text-decoration: underline;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# ==============================================================================
-# === INITIALIZE SESSION STATE FOR HISTORY & SOURCES ===
-# ==============================================================================
+# --- Initialize session state for chat history & sources ---
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "last_sources" not in st.session_state:
     st.session_state.last_sources = []
 
-# ==============================================================================
-# === HEADER & WELCOME BANNER ===
-# ==============================================================================
+# --- Header ---
 st.markdown(
     """<h1 style="text-align: center; font-size: 50px; margin-bottom: 1rem; font-family: inherit;">
-    Climate Impact Assistant</h1>""",
+    IPCC Assistant</h1>""",
     unsafe_allow_html=True,
 )
 
+# --- Welcome message (centered, greyed out) ---
 st.markdown(
-    """<div class="welcome-banner">
-    <strong>Welcome to the Climate Impact Assistant!</strong><br>
-    Ask me how different climate scenarios affect sectors like energy, transport, or agriculture.
-    I provide clear, sourced answers on risks, strategies, and impacts across industries.
-    You can explore anything from technologies to policy options.
-    Need help? Check the user guide in the bottom right corner.
-    </div>""",
+    """
+    <div class="welcome-banner">
+        <strong>Welcome to the IPCC Assistant!</strong><br>
+        Ask me how different climate scenarios affect sectors like energy, transport, or agriculture.
+        I provide clear, sourced answers on risks, strategies, and impacts across industries.<br>
+        You can explore anything from technologies to policy options.
+    </div>
+    """,
     unsafe_allow_html=True,
 )
 
-# ==============================================================================
-# === CHAT DISPLAY (SHOW HISTORY) ===
-# ==============================================================================
+# --- “User Guide” link below the welcome message ---
+st.markdown(
+    """
+    <div class="user-guide-link">
+        <a href="/user_guide.pdf" target="_blank">📄 View the User Guide</a>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# --- Chat input (appears at bottom) ---
+question = st.chat_input("Ask something about climate reports...")
+
+# === Submit new question ===
+if question and question.strip():
+    # Reset last_timings so we don’t show stale data
+    st.session_state.last_timings = None
+    st.session_state.chat_history.append((question, "..."))  # Placeholder for streaming
+
+# === Chat display ===
 for user_msg, bot_msg in st.session_state.chat_history:
 
     def linkify_refs(text):
         """
-        Find any '(6)', '(11)', or '(6, 11)' etc., 
-        and turn each number into its own clickable anchor.
+        Find any '(6)', '(11)', or '(6, 11)', etc., and turn each number into its own clickable anchor.
         E.g. '(6, 11)' → '<a href="#ref6">(6)</a> <a href="#ref11">(11)</a>'.
         """
         def _replace(match):
@@ -244,30 +240,26 @@ for user_msg, bot_msg in st.session_state.chat_history:
         unsafe_allow_html=True,
     )
 
-# ==============================================================================
-# === TIMING BUBBLE (uncomment if wanted) ===
-# ==============================================================================
-# if st.session_state.last_timings is not None:
-#     t = st.session_state.last_timings
-#     st.markdown(
-#         f"""
-#         <div class="chat-row bot-row">
-#             <div class="timing-bubble">
-#                 ⏱ Contextualization: {t.get('contextualization', 0):.2f}s<br>
-#                 ⏱ Paraphrase Gen: {t.get('paraphrase_generation', 0):.2f}s<br>
-#                 ⏱ Retrieval+Rerank: {t.get('retrieval_and_rerank', 0):.2f}s<br>
-#                 ⏱ LLM Generation: {t.get('generation', 0):.2f}s
-#             </div>
-#         </div>
-#         """,
-#         unsafe_allow_html=True,
-#     )
-#     # Clear so it only shows once
-#     st.session_state.last_timings = None
+# If we have stored timings, render them once as a “timing‐bubble”
+if st.session_state.last_timings is not None:
+    t = st.session_state.last_timings
+    st.markdown(
+        f"""
+        <div class="chat-row bot-row">
+            <div class="timing-bubble">
+                ⏱ Contextualization: {t.get('contextualization', 0):.2f}s<br>
+                ⏱ Paraphrase Gen: {t.get('paraphrase_generation', 0):.2f}s<br>
+                ⏱ Retrieval+Rerank: {t.get('retrieval_and_rerank', 0):.2f}s<br>
+                ⏱ LLM Generation: {t.get('generation', 0):.2f}s
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    # Clear so it only shows once
+    st.session_state.last_timings = None
 
-# ==============================================================================
-# === GENERATE RESPONSE LOGIC (WITH SPINNER) ===
-# ==============================================================================
+# === Generate response logic (wrapped in a spinner) ===
 if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "...":
     question = st.session_state.chat_history[-1][0]
 
@@ -298,7 +290,7 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
     placeholder = st.empty()
     streamed = ""
     for para in answer_full.split("\n"):
-        # Append this entire paragraph (with its trailing newline)
+        # Append this entire paragraph (with its trailing newline) at once
         streamed += para + "\n"
 
         # Render the partial text inside a chat bubble
@@ -319,9 +311,7 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
     st.session_state.last_sources = response["chunks"]
     st.rerun()
 
-# ==============================================================================
-# === COLLAPSIBLE, HORIZONTALLY SCROLLABLE “SOURCES” STRIP ===
-# ==============================================================================
+# === Collapsible, horizontally scrollable “Sources” strip ===
 if st.session_state.last_sources:
     # Expander collapsed by default (expanded=False)
     with st.expander("Show Sources", expanded=False):
@@ -360,123 +350,5 @@ if st.session_state.last_sources:
           }
           .source-card-snippet {
             flex-grow: 1;
-            overflow-y: auto;         /* Enables vertical scrolling inside the card */
-            margin-bottom: 0.5rem;
-            white-space: normal;      /* Allow wrapping */
-          }
-          .source-card-footer {
-            font-size: 13px;
-            margin-top: auto;         /* Stick to bottom */
-          }
-          .source-card a {
-            text-decoration: none;
-            color: #0066cc;
-            font-size: 13px;
-          }
-        </style>
-        <div class="sources-container">
-        """
-
-        for i, chunk in enumerate(st.session_state.last_sources):
-            meta = chunk.get("metadata", {})
-            page = meta.get("source", "")
-            report = meta.get("report_name", "Unknown Report")
-            page_number = int(page.replace("page_", "")) if "page_" in page else "?"
-            score = chunk.get("reranker_score", 0.0)
-            rel = round((score + 10) * 5, 1)
-            ref = chunk.get("reference", f"({i+1})")
-
-            # Each card has an anchor ID "ref{i+1}" so the inline link can jump here
-            html += f'<div class="source-card" id="ref{i+1}">'
-
-            # Header
-            html += f'<div class="source-card-header">{ref} – {report} – Page {page_number}</div>'
-
-            # FULL chunk text (no truncation), scrollable
-            raw_text = chunk["text"].replace("\n", " ")
-            html += f'<div class="source-card-snippet">{raw_text}</div>'
-
-            # Footer: relevancy & PDF link
-            pdf_url = (
-                "https://www.ipcc.ch/report/ar6/wg3/downloads/report/"
-                "IPCC_AR6_WGIII_FullReport.pdf"
-                f"#page={page_number}"
-            )
-            html += (
-                f'<div class="source-card-footer">'
-                f'<i>Relevancy: {rel}%</i><br>'
-                f'<a href="{pdf_url}" target="_blank">Open PDF</a>'
-                f'</div>'
-            )
-
-            html += "</div>"
-
-        html += "</div>"
-
-        # Render it via st.markdown so that anchor links (#refN) work on the same page
-        st.markdown(html, unsafe_allow_html=True)
-
-# ==============================================================================
-# === INPUT ROW: CHAT_INPUT + “User Guide” BUTTON (AT BOTTOM) ===
-# ==============================================================================
-col1, col2 = st.columns([0.85, 0.15])
-
-with col1:
-    # This chat_input is now at the bottom of the page
-    question = st.chat_input("Ask something about climate reports…", key="bottom_chat_input")
-
-with col2:
-    st.markdown(
-        f'<a href="{USER_GUIDE_URL}" target="_blank" class="user-guide-btn">User Guide</a>',
-        unsafe_allow_html=True,
-    )
-
-# ==============================================================================
-# === SUBMIT NEW QUESTION (BOTTOM INPUT) ===
-# ==============================================================================
-if question and question.strip():
-    # Reset last_timings so we don’t show stale data
-    st.session_state.last_timings = None
-    st.session_state.chat_history.append((question, "..."))
-
-# ==============================================================================
-# === “MAKE THE INPUT ROW STICKY AT THE BOTTOM” CSS ===
-# ==============================================================================
-st.markdown(
-    """
-    <style>
-    /* 
-      Fix the chat_input form (data-testid="stChatInputForm") to the bottom 
-      and keep it full‐width (85% for the input, 15% for the button). 
-    */
-    [data-testid="stChatInputForm"] {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        width: 85%;                /* match the 0.85 fraction used in the columns above */
-        z-index: 1000;             /* stay on top of other elements */
-        background-color: white;   /* avoid transparency glitches */
-        padding: 1rem;             /* match the gap you’d expect around the input */
-    }
-    /* 
-      Fix our custom “User Guide” link so it sits at the bottom right 
-      of the same row. 
-    */
-    .user-guide-btn {
-        position: fixed;
-        bottom: 0.75rem;            /* align roughly with chat_input’s vertical position */
-        right: 1rem;
-        z-index: 1000;
-    }
-    /* 
-      Add a bit of bottom‐padding to the main content, 
-      so that long conversations / sources don’t disappear behind the fixed bar. 
-    */
-    .block-container {
-        padding-bottom: 6rem;       /* enough space so content can scroll above the bar */
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
+            overflow-y: auto;         /* Enable vertical scrolling */
+            margin-bottom: 0.5r
