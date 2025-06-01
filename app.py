@@ -20,11 +20,11 @@ if "last_timings" not in st.session_state:
 # --- Set page configuration ---
 st.set_page_config(page_title="IPCC Assistant", page_icon="💬", layout="wide")
 
-# --- Custom CSS for chat bubbles, timing bubble, and source‐cards ---
+# --- Custom CSS for chat bubbles, timing bubble, and source-cards ---
 st.markdown(
     """
     <style>
-    /* Chat‐bubble styling */
+    /* ================= Chat-bubble styling ================= */
     .chat-bubble {
         border-radius: 12px;
         padding: 0.75rem 1rem;
@@ -65,7 +65,7 @@ st.markdown(
         outline: none !important;
     }
 
-    /* Timing‐bubble styling */
+    /* ================= Timing-bubble styling ================= */
     .timing-bubble {
         border-radius: 12px;
         background-color: #f0f0f0;
@@ -77,11 +77,11 @@ st.markdown(
         font-family: inherit;
     }
 
-    /* Sources strip styling */
+    /* ================= Sources strip styling ================= */
     .sources-container {
         display: flex;
         flex-direction: row;
-        flex-wrap: nowrap;            /* ← Prevent any wrapping onto a new line */
+        flex-wrap: nowrap;            /* ← Force single horizontal row */
         overflow-x: auto;
         overflow-y: hidden;
         white-space: nowrap;
@@ -89,37 +89,44 @@ st.markdown(
         background-color: #f0f0f0;
         border-top: 2px solid #ddd;
     }
+
     .source-card {
         display: inline-flex;
         flex-direction: column;
         justify-content: flex-start;
         width: 320px;
-        min-height: 180px;            /* ← Force fixed card height */
+        min-height: 180px;            /* ← Fixed card height */
         max-height: 180px;
-        overflow: hidden;             /* ← Clip any overflow text */
+        overflow: hidden;             /* ← Clip anything beyond */
         background: #fff;
         margin-right: 12px;
         padding: 12px;
         border: 1px solid #ccc;
         border-radius: 10px;
-        flex-shrink: 0;               /* ← Prevent shrinking below 320px */
+        flex-shrink: 0;
         font-family: inherit;
         font-size: 14px;
         line-height: 1.3;
     }
+
     .source-card-header {
         font-weight: bold;
         margin-bottom: 0.5rem;
     }
+
     .source-card-snippet {
-        /* let snippet wrap normally, but be clipped by parent’s fixed height */
+        /* Let snippet wrap, but constrain its height so footer remains visible */
+        max-height: 100px;       /* ← (≈180px card – header ~20 – footer ~40 – padding ~20) */
+        overflow: hidden;        /* ← Clip overflow text */
         margin-bottom: 0.5rem;
         white-space: normal;
     }
+
     .source-card-footer {
         font-size: 13px;
-        margin-top: auto;  /* Push footer to bottom of card */
+        margin-top: auto;        /* ← Push footer to bottom of card */
     }
+
     .source-card a {
         text-decoration: none;
         color: #0066cc;
@@ -156,7 +163,7 @@ for user_msg, bot_msg in st.session_state.chat_history:
 
     def linkify_refs(text):
         """
-        Find any '(6)', '(11)', or '(6, 11)', etc. and turn each number into its own clickable anchor.
+        Find any “(6)”, “(11)”, or “(6, 11)”, etc. and turn each number into its own clickable anchor.
         E.g. '(6, 11)' → '<a href="#ref6">(6)</a> <a href="#ref11">(11)</a>'.
         """
         def _replace(match):
@@ -169,7 +176,6 @@ for user_msg, bot_msg in st.session_state.chat_history:
                 )
             return " ".join(anchors)
 
-        # The regex captures one or more digits, optionally separated by commas
         return re.sub(r"\((\d+(?:\s*,\s*\d+)*)\)", _replace, text)
 
     bot_msg_html = linkify_refs(bot_msg)
@@ -184,7 +190,7 @@ for user_msg, bot_msg in st.session_state.chat_history:
         unsafe_allow_html=True,
     )
 
-    # Display bot’s response (with each reference now its own anchor)
+    # Display bot’s response (with each ref separately clickable)
     st.markdown(
         f"""
         <div class="chat-row bot-row">
@@ -194,7 +200,7 @@ for user_msg, bot_msg in st.session_state.chat_history:
         unsafe_allow_html=True,
     )
 
-# If we have stored timings, render them once as a “timing‐bubble”
+# If we have stored timings, render them once as a “timing-bubble”
 if st.session_state.last_timings is not None:
     t = st.session_state.last_timings
     st.markdown(
@@ -244,7 +250,7 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
     placeholder = st.empty()
     streamed = ""
     for para in answer_full.split("\n"):
-        # Append this entire paragraph (with its trailing newline) at once
+        # Append this entire paragraph (with its trailing newline)
         streamed += para + "\n"
 
         # Render the partial text inside a chat bubble
@@ -275,7 +281,7 @@ if st.session_state.last_sources:
           .sources-container {
             display: flex;
             flex-direction: row;
-            flex-wrap: nowrap;            /* ← Prevent any wrapping onto a new line */
+            flex-wrap: nowrap;            /* ← Force single horizontal row */
             overflow-x: auto;
             overflow-y: hidden;
             white-space: nowrap;
@@ -288,9 +294,9 @@ if st.session_state.last_sources:
             flex-direction: column;
             justify-content: flex-start;
             width: 320px;
-            min-height: 180px;       /* ← Force each card to be exactly 180px tall */
+            min-height: 180px;       /* ← Fixed height */
             max-height: 180px;
-            overflow: hidden;        /* ← Clip any text that doesn't fit */
+            overflow: hidden;        /* ← Clip any overflow text */
             background: #fff;
             margin-right: 12px;
             padding: 12px;
@@ -306,12 +312,14 @@ if st.session_state.last_sources:
             margin-bottom: 0.5rem;
           }
           .source-card-snippet {
+            max-height: 100px;       /* ← Ensure footer below is always visible */
+            overflow: hidden;        /* ← Clip any snippet spillover */
             margin-bottom: 0.5rem;
-            white-space: normal;  /* allow wrapping inside fixed-height box */
+            white-space: normal;     /* ← Allow the snippet to wrap onto multiple lines */
           }
           .source-card-footer {
             font-size: 13px;
-            margin-top: auto;  /* push footer to bottom */
+            margin-top: auto;       /* ← Push footer to bottom */
           }
           .source-card a {
             text-decoration: none;
@@ -337,7 +345,7 @@ if st.session_state.last_sources:
             # Header line
             html += f'<div class="source-card-header">{ref} – {report} – Page {page_number}</div>'
 
-            # Snippet (max ~400 chars), allowing multiple lines
+            # Snippet (max ~400 chars), allowing multiple lines up to 100px
             raw_text = chunk["text"]
             snippet = raw_text[:400].replace("\n", " ")
             if len(raw_text) > 400:
