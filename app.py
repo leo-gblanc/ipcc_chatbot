@@ -6,21 +6,29 @@ from rag_core import load_faiss_resources, generate_answer
 import re
 import streamlit as st
 
-# === Load FAISS and metadata once ===
+# ==============================================================================
+# === LOAD FAISS + METADATA ONCE ===
+# ==============================================================================
 if "faiss_index" not in st.session_state:
     index, chunk_ids, chunk_id_to_info = load_faiss_resources()
     st.session_state.faiss_index = index
     st.session_state.chunk_ids = chunk_ids
     st.session_state.chunk_id_to_info = chunk_id_to_info
 
-# --- Initialize storage for timings (if not already set) ---
+# ==============================================================================
+# === INITIALIZE STORAGE FOR TIMINGS ===
+# ==============================================================================
 if "last_timings" not in st.session_state:
     st.session_state.last_timings = None
 
-# --- Set page configuration ---
+# ==============================================================================
+# === SET PAGE CONFIGURATION ===
+# ==============================================================================
 st.set_page_config(page_title="IPCC Assistant", page_icon="💬", layout="wide")
 
-# --- Custom CSS for chat‐bubbles, timing bubble, and source‐cards ---
+# ==============================================================================
+# === CUSTOM CSS FOR CHAT BUBBLES, TIMING BUBBLE, SOURCE CARDS, ETC. ===
+# ==============================================================================
 st.markdown(
     """
     <style>
@@ -153,13 +161,17 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- Initialize session state for chat history & sources ---
+# ==============================================================================
+# === INITIALIZE SESSION STATE FOR HISTORY & SOURCES ===
+# ==============================================================================
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "last_sources" not in st.session_state:
     st.session_state.last_sources = []
 
-# --- Header ---
+# ==============================================================================
+# === HEADER & WELCOME BANNER ===
+# ==============================================================================
 st.markdown(
     """<h1 style="text-align: center; font-size: 50px; margin-bottom: 1rem; font-family: inherit;">
     IPCC Assistant</h1>""",
@@ -171,7 +183,7 @@ st.markdown(
     """
     <div class="welcome-banner">
         <strong>Welcome to the IPCC Assistant!</strong><br>
-        Ask me how different climate scenarios affect sectors like energy, transport, or agriculture.
+        Ask me how different climate scenarios affect sectors like energy, transport, or agriculture.<br>
         I provide clear, sourced answers on risks, strategies, and impacts across industries.<br>
         You can explore anything from technologies to policy options.
     </div>
@@ -183,27 +195,34 @@ st.markdown(
 st.markdown(
     """
     <div class="user-guide-link">
-        <a href="/user_guide.pdf" target="_blank">📄 View the User Guide</a>
+        <a href="/static/user_guide.pdf" target="_blank">📄 View the User Guide</a>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
-# --- Chat input (appears at bottom) ---
+# ==============================================================================
+# === CHAT INPUT (BOTTOM) ===
+# ==============================================================================
 question = st.chat_input("Ask something about climate reports...")
 
-# === Submit new question ===
+# ==============================================================================
+# === SUBMIT NEW QUESTION ===
+# ==============================================================================
 if question and question.strip():
     # Reset last_timings so we don’t show stale data
     st.session_state.last_timings = None
     st.session_state.chat_history.append((question, "..."))  # Placeholder for streaming
 
-# === Chat display ===
+# ==============================================================================
+# === CHAT DISPLAY (SHOW HISTORY) ===
+# ==============================================================================
 for user_msg, bot_msg in st.session_state.chat_history:
 
     def linkify_refs(text):
         """
-        Find any '(6)', '(11)', or '(6, 11)', etc., and turn each number into its own clickable anchor.
+        Find any '(6)', '(11)', or '(6, 11)', etc., 
+        and turn each number into its own clickable anchor.
         E.g. '(6, 11)' → '<a href="#ref6">(6)</a> <a href="#ref11">(11)</a>'.
         """
         def _replace(match):
@@ -240,26 +259,30 @@ for user_msg, bot_msg in st.session_state.chat_history:
         unsafe_allow_html=True,
     )
 
-# If we have stored timings, render them once as a “timing‐bubble”
-if st.session_state.last_timings is not None:
-    t = st.session_state.last_timings
-    st.markdown(
-        f"""
-        <div class="chat-row bot-row">
-            <div class="timing-bubble">
-                ⏱ Contextualization: {t.get('contextualization', 0):.2f}s<br>
-                ⏱ Paraphrase Gen: {t.get('paraphrase_generation', 0):.2f}s<br>
-                ⏱ Retrieval+Rerank: {t.get('retrieval_and_rerank', 0):.2f}s<br>
-                ⏱ LLM Generation: {t.get('generation', 0):.2f}s
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    # Clear so it only shows once
-    st.session_state.last_timings = None
+# ==============================================================================
+# === TIMING BUBBLE (optional) ===
+# ==============================================================================
+# if st.session_state.last_timings is not None:
+#     t = st.session_state.last_timings
+#     st.markdown(
+#         f"""
+#         <div class="chat-row bot-row">
+#             <div class="timing-bubble">
+#                 ⏱ Contextualization: {t.get('contextualization', 0):.2f}s<br>
+#                 ⏱ Paraphrase Gen: {t.get('paraphrase_generation', 0):.2f}s<br>
+#                 ⏱ Retrieval+Rerank: {t.get('retrieval_and_rerank', 0):.2f}s<br>
+#                 ⏱ LLM Generation: {t.get('generation', 0):.2f}s
+#             </div>
+#         </div>
+#         """,
+#         unsafe_allow_html=True,
+#     )
+#     # Clear so it only shows once
+#     st.session_state.last_timings = None
 
-# === Generate response logic (wrapped in a spinner) ===
+# ==============================================================================
+# === GENERATE RESPONSE LOGIC (WITH SPINNER) ===
+# ==============================================================================
 if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "...":
     question = st.session_state.chat_history[-1][0]
 
@@ -275,10 +298,7 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
             index=st.session_state.faiss_index,
             chunk_ids=st.session_state.chunk_ids,
             chunk_id_to_info=st.session_state.chunk_id_to_info,
-            k=4,
-            window=1,
-            rerank_top_n=6,
-            chat_history=memory,
+            k=4, window=1, rerank_top_n=6, chat_history=memory
         )
 
     # Store the returned timing breakdown so we can render it above
@@ -311,9 +331,10 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
     st.session_state.last_sources = response["chunks"]
     st.rerun()
 
-# === Collapsible, horizontally scrollable “Sources” strip ===
+# ==============================================================================
+# === COLLAPSIBLE, HORIZONTALLY SCROLLABLE “SOURCES” STRIP ===
+# ==============================================================================
 if st.session_state.last_sources:
-    # Expander collapsed by default (expanded=False)
     with st.expander("Show Sources", expanded=False):
         # Build ONE big HTML block (including CSS + cards with anchors)
         html = """
