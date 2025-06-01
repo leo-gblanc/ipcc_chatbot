@@ -10,7 +10,8 @@ import streamlit as st
 # === CONSTANTS ===
 # ==============================================================================
 # We assume `user_guide.pdf` is placed at the root of this repo.
-USER_GUIDE_URL = "user_guide.pdf"
+# On Streamlit Cloud, files in the repo root are served at "/<filename>".
+USER_GUIDE_URL = "/user_guide.pdf"
 
 # ==============================================================================
 # === LOAD FAISS + METADATA ONCE ===
@@ -38,6 +39,16 @@ st.set_page_config(page_title="Climate Impact Assistant", page_icon="💬", layo
 st.markdown(
     """
     <style>
+    /* ================= Welcome‐banner styling ================= */
+    .welcome-banner {
+        max-width: 700px;
+        color: #777777;        /* greyed out for discrete look */
+        font-family: inherit;
+        font-size: 16px;
+        margin: auto;
+        margin-bottom: 2rem;
+    }
+
     /* ================= Chat‐bubble styling ================= */
     .chat-bubble {
         border-radius: 12px;
@@ -149,7 +160,7 @@ st.markdown(
         font-family: inherit;
         text-decoration: none;
         display: inline-block;
-        margin-top: 0.25rem;
+        margin-left: 0.5rem;
     }
     .user-guide-btn:hover {
         background-color: #6DAF38;
@@ -178,37 +189,15 @@ st.markdown(
 )
 
 st.markdown(
-    """
-    **Welcome to the Climate Impact Assistant!**
+    """<div class="welcome-banner">
+    <strong>Welcome to the Climate Impact Assistant!</strong><br>
     Ask me how different climate scenarios affect sectors like energy, transport, or agriculture.
     I provide clear, sourced answers on risks, strategies, and impacts across industries.
     You can explore anything from technologies to policy options.
     Need help? Check the user guide in the bottom right corner.
-    """,
+    </div>""",
     unsafe_allow_html=True,
 )
-
-# ==============================================================================
-# === INPUT ROW: CHAT_INPUT + “User Guide” BUTTON ===
-# ==============================================================================
-col1, col2 = st.columns([0.85, 0.15])
-
-with col1:
-    question = st.chat_input("Ask something about climate reports…", key="chat_input")
-
-with col2:
-    st.markdown(
-        f'<a href="{USER_GUIDE_URL}" target="_blank" class="user-guide-btn">User Guide</a>',
-        unsafe_allow_html=True,
-    )
-
-# ==============================================================================
-# === SUBMIT NEW QUESTION ===
-# ==============================================================================
-if question and question.strip():
-    # Reset last_timings so we don’t show stale data
-    st.session_state.last_timings = None
-    st.session_state.chat_history.append((question, "..."))
 
 # ==============================================================================
 # === CHAT DISPLAY (SHOW HISTORY) ===
@@ -426,3 +415,25 @@ if st.session_state.last_sources:
 
         # Render it via st.markdown so that anchor links (#refN) work on the same page
         st.markdown(html, unsafe_allow_html=True)
+
+# ==============================================================================
+# === INPUT ROW: CHAT_INPUT + “User Guide” BUTTON (AT BOTTOM) ===
+# ==============================================================================
+col1, col2 = st.columns([0.85, 0.15])
+
+with col1:
+    question = st.chat_input("Ask something about climate reports…", key="bottom_chat_input")
+
+with col2:
+    st.markdown(
+        f'<a href="{USER_GUIDE_URL}" target="_blank" class="user-guide-btn">User Guide</a>',
+        unsafe_allow_html=True,
+    )
+
+# ==============================================================================
+# === SUBMIT NEW QUESTION (BOTTOM INPUT) ===
+# ==============================================================================
+if question and question.strip():
+    # Reset last_timings so we don’t show stale data
+    st.session_state.last_timings = None
+    st.session_state.chat_history.append((question, "..."))
