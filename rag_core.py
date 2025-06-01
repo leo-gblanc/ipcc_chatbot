@@ -257,9 +257,11 @@ def generate_answer(query: str,
     Never assume facts outside the given documents, and do not speculate. Be factual, structured, and neutral.
     """)
 
-    msgs = memory_msgs + [
+    # Put all system messages first, then memory, then the user prompt
+    msgs = [
         relevance_check,
-        existing_system,
+        existing_system
+    ] + memory_msgs + [
         HumanMessage(content=prompt)
     ]
 
