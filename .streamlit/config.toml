@@ -1,3 +1,2 @@
 [watch]
-# Glob-pattern(s) to exclude from file‐watcher scans:
 exclude = ["**/site-packages/torch/**", "**/torch/**"]
