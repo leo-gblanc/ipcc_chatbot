@@ -1,2 +1,0 @@
-[watch]
-exclude = ["**/site-packages/torch/**", "**/torch/**"]

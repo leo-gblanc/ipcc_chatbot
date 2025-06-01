@@ -6,9 +6,7 @@ from langchain.schema import SystemMessage, HumanMessage
 import urllib.request
 import os
 from sklearn.preprocessing import normalize
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-import torch
-import time  # ← Add import for timing
+import time  # ← We still need timing
 
 # === Configuration ===
 
@@ -19,7 +17,7 @@ META_URL  = "https://drive.google.com/uc?export=download&id=1DcG89F5hRGRs0Oe6YO4
 FAISS_INDEX_PATH = "/tmp/ipcc_faiss.index"
 METADATA_PATH    = "/tmp/ipcc_faiss_metadata.pkl"
 
-# Download once if not already here
+# Download once if not already present
 if not os.path.exists(FAISS_INDEX_PATH):
     urllib.request.urlretrieve(FAISS_URL, FAISS_INDEX_PATH)
     print("✅ FAISS index downloaded.")
@@ -35,13 +33,11 @@ def load_faiss_resources():
         meta = pickle.load(f)
     return index, meta["chunk_ids"], meta["chunk_id_to_info"]
 
-# === Initialize models ===
-embedder = DatabricksEmbeddings(endpoint="databricks-gte-large-en", batch_size=1)
+# === Initialize embedding & chat models (no torch here) ===
+embedder   = DatabricksEmbeddings(endpoint="databricks-gte-large-en", batch_size=1)
 chat_model = ChatDatabricks(endpoint="databricks-claude-3-7-sonnet", max_tokens=2048, temperature=0.1)
-rerank_model = AutoModelForSequenceClassification.from_pretrained("BAAI/bge-reranker-base")
-rerank_tokenizer = AutoTokenizer.from_pretrained("BAAI/bge-reranker-base")
 
-# === Contextualize and paraphrase ===
+# === Contextualize and paraphrase (no torch) ===
 def contextualize_query_with_background(query: str) -> str:
     prompt = """
     You are a domain expert in climate change mitigation (IPCC WGIII).
@@ -63,7 +59,7 @@ def generate_paraphrases(query: str) -> list:
     response = chat_model.invoke([SystemMessage(content=prompt), HumanMessage(content=query)])
     return [line.strip() for line in response.content.strip().split("\n") if line.strip()]
 
-# === FAISS retrieval with neighbors ===
+# === FAISS retrieval with neighbors (no torch) ===
 def faiss_similarity_search_groups(query: str, index, chunk_ids, chunk_id_to_info, k: int = 5, window: int = 1):
     query_vector = embedder.embed_query(query)
     query_vector = np.array([query_vector], dtype="float32")
@@ -89,17 +85,34 @@ def faiss_similarity_search_groups(query: str, index, chunk_ids, chunk_id_to_inf
             chunk_groups.append(group)
     return chunk_groups
 
-# === Rerank chunk groups ===
+# === Rerank chunk groups (lazy‐load torch + HF model inside this function) ===
 def rerank_chunk_groups(query, chunk_groups, top_n=5):
-    inputs = [f"{query} [SEP] {' '.join(chunk['text'] for chunk in group)}" for group in chunk_groups]
-    tokens = rerank_tokenizer(inputs, padding=True, truncation=True, return_tensors="pt")
+    # Import torch and transformers only when this function is called, to avoid error caused by Streamlit’s watcher
+    import torch
+    from transformers import AutoTokenizer, AutoModelForSequenceClassification
+
+    # Instantiate tokenizer & model here (inside the function)
+    tokenizer = AutoTokenizer.from_pretrained("BAAI/bge-reranker-base")
+    model     = AutoModelForSequenceClassification.from_pretrained("BAAI/bge-reranker-base")
+
+    # Build inputs for scoring
+    inputs = [
+        f"{query} [SEP] " + " ".join(chunk["text"] for chunk in group)
+        for group in chunk_groups
+    ]
+    tokens = tokenizer(inputs, padding=True, truncation=True, return_tensors="pt")
+
     with torch.no_grad():
-        scores = rerank_model(**tokens).logits.squeeze(-1)
+        scores = model(**tokens).logits.squeeze(-1)
+
+    # Select top_n groups by score
     top_indices = torch.topk(scores, k=min(top_n, len(chunk_groups))).indices.tolist()
-    top_groups = [chunk_groups[i] for i in top_indices]
+    top_groups  = [chunk_groups[i] for i in top_indices]
+
     for i, idx in enumerate(top_indices):
         for chunk in top_groups[i]:
             chunk["reranker_score"] = round(scores[idx].item(), 4)
+
     return top_groups
 
 # === Generate answer with timing measurements ===
@@ -123,7 +136,7 @@ def generate_answer(query: str,
     paraphrases = generate_paraphrases(query)
     timings["paraphrase_generation"] = time.time() - t1
 
-    # Build enriched queries
+    # Build enriched queries (original + paraphrases)
     queries = [query] + paraphrases
     enriched_queries = [f"{q}\n\n{context}" for q in queries]
 
@@ -139,6 +152,7 @@ def generate_answer(query: str,
                 seen_ids.add(ids)
                 all_groups.append(group)
 
+    # **Rerank** (this will import torch inside the function)
     top_groups = rerank_chunk_groups(query, all_groups, top_n=rerank_top_n)
     timings["retrieval_and_rerank"] = time.time() - t2
 
