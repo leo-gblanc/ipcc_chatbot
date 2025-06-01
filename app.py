@@ -20,7 +20,7 @@ if "last_timings" not in st.session_state:
 # --- Set page configuration ---
 st.set_page_config(page_title="IPCC Assistant", page_icon="💬", layout="wide")
 
-# --- Custom CSS for chat bubbles and source‐cards ---
+# --- Custom CSS for chat bubbles, timing bubble, and source‐cards ---
 st.markdown(
     """
     <style>
@@ -144,7 +144,7 @@ question = st.chat_input("Ask something about climate reports...")
 
 # === Submit new question ===
 if question and question.strip():
-    # Reset last_timings so we don’t accidentally show stale timings
+    # Reset last_timings so we don’t show stale data
     st.session_state.last_timings = None
     st.session_state.chat_history.append((question, "..."))  # Placeholder for streaming
 
@@ -181,7 +181,7 @@ for user_msg, bot_msg in st.session_state.chat_history:
         unsafe_allow_html=True,
     )
 
-# If we have a stored timing dict, render it once as a “timing‐bubble”
+# If we have stored timings, render them once as a “timing‐bubble”
 if st.session_state.last_timings is not None:
     t = st.session_state.last_timings
     st.markdown(
@@ -197,10 +197,10 @@ if st.session_state.last_timings is not None:
         """,
         unsafe_allow_html=True,
     )
-    # Clear it so we only show once
+    # Clear so it only shows once
     st.session_state.last_timings = None
 
-# === Generate response logic ===
+# === Generate response logic (wrapped in a spinner) ===
 if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "...":
     question = st.session_state.chat_history[-1][0]
 
@@ -209,76 +209,23 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
     for user_msg, bot_msg in st.session_state.chat_history[-3:-1]:
         memory.append({"user": user_msg, "assistant": bot_msg})
 
-    # Show a fake “thinking...” progress bar
-    progress_placeholder = st.empty()
-    start = time.time()
-    while True:
-        elapsed = time.time() - start
-        if elapsed < 30:
-            pct = int((elapsed / 30) * 80)
-        elif elapsed < 40:
-            pct = 80 + int(((elapsed - 30) / 10) * 10)
-        elif elapsed < 50:
-            pct = 90 + int(((elapsed - 40) / 10) * 5)
-        elif elapsed < 60:
-            pct = 95 + int(((elapsed - 50) / 10) * 3)
-        elif elapsed < 75:
-            pct = 98 + int(((elapsed - 60) / 15) * 1)
-        else:
-            pct = 99
+    # Wrap generate_answer(...) in a spinner so the user sees “Thinking...”
+    with st.spinner("Thinking…"):
+        response = generate_answer(
+            query=question,
+            index=st.session_state.faiss_index,
+            chunk_ids=st.session_state.chunk_ids,
+            chunk_id_to_info=st.session_state.chunk_id_to_info,
+            k=4,
+            window=1,
+            rerank_top_n=6,
+            chat_history=memory,
+        )
 
-        progress_bar_html = f"""
-            <div class="loader-bar">
-                <div class="loader-fill" style="width: {pct}%;"></div>
-            </div>
-            <div style="text-align:center; font-style: italic; font-size: 14px;">Thinking... {pct}%</div>
-            <style>
-                .loader-bar {{
-                    width: 60%;
-                    margin: auto;
-                    height: 8px;
-                    background-color: #e0e0e0;
-                    border-radius: 8px;
-                    overflow: hidden;
-                    margin-top: 8px;
-                    margin-bottom: 12px;
-                }}
-                .loader-fill {{
-                    height: 100%;
-                    background-color: #81C244;
-                    transition: width 0.3s ease-in-out;
-                }}
-            </style>
-        """
-        progress_placeholder.markdown(progress_bar_html, unsafe_allow_html=True)
-
-        if elapsed >= 75:
-            break
-        time.sleep(0.25)
-
-    # Call the rag_core generate_answer
-    response = generate_answer(
-        query=question,
-        index=st.session_state.faiss_index,
-        chunk_ids=st.session_state.chunk_ids,
-        chunk_id_to_info=st.session_state.chunk_id_to_info,
-        k=4,
-        window=1,
-        rerank_top_n=6,
-        chat_history=memory,
-    )
-
-    # Store timings in session_state so we can render them in the UI
+    # Store the returned timing breakdown so we can render it above
     st.session_state.last_timings = response.get("timings", {})
 
     answer_full = response["answer"]
-    # Force the progress bar to 100%
-    progress_placeholder.markdown(
-        progress_bar_html.replace(f"width: {pct}%", "width: 100%").replace(f"{pct}%", "100%"),
-        unsafe_allow_html=True,
-    )
-    time.sleep(0.3)
-    progress_placeholder.empty()
 
     # Stream the assistant’s answer word by word
     placeholder = st.empty()
@@ -295,7 +242,7 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
         )
         time.sleep(0.02)
 
-    # Replace the placeholder with the full answer
+    # Replace the placeholder with the full answer (so chat_history is updated)
     st.session_state.chat_history[-1] = (question, answer_full)
     st.session_state.last_sources = response["chunks"]
     st.rerun()
