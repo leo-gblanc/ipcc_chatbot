@@ -351,4 +351,57 @@ if st.session_state.last_sources:
           .source-card-snippet {
             flex-grow: 1;
             overflow-y: auto;         /* Enable vertical scrolling */
-            margin-bottom: 0.5r
+            margin-bottom: 0.5rem;
+            white-space: normal;      /* Allow wrapping */
+          }
+          .source-card-footer {
+            font-size: 13px;
+            margin-top: auto;         /* Stick to bottom */
+          }
+          .source-card a {
+            text-decoration: none;
+            color: #0066cc;
+            font-size: 13px;
+          }
+        </style>
+        <div class="sources-container">
+        """
+
+        for i, chunk in enumerate(st.session_state.last_sources):
+            meta = chunk.get("metadata", {})
+            page = meta.get("source", "")
+            report = meta.get("report_name", "Unknown Report")
+            page_number = int(page.replace("page_", "")) if "page_" in page else "?"
+            score = chunk.get("reranker_score", 0.0)
+            rel = round((score + 10) * 5, 1)
+            ref = chunk.get("reference", f"({i+1})")
+
+            # Each card has an anchor ID "ref{i+1}" so the inline link can jump here
+            html += f'<div class="source-card" id="ref{i+1}">'
+
+            # Header line
+            html += f'<div class="source-card-header">{ref} – {report} – Page {page_number}</div>'
+
+            # FULL chunk text (no truncation), wrapped under a scrollable snippet box
+            raw_text = chunk["text"].replace("\n", " ")
+            html += f'<div class="source-card-snippet">{raw_text}</div>'
+
+            # Footer: relevancy + link
+            pdf_url = (
+                "https://www.ipcc.ch/report/ar6/wg3/downloads/report/"
+                "IPCC_AR6_WGIII_FullReport.pdf"
+                f"#page={page_number}"
+            )
+            html += (
+                f'<div class="source-card-footer">'
+                f'<i>Relevancy: {rel}%</i><br>'
+                f'<a href="{pdf_url}" target="_blank">Open PDF</a>'
+                f'</div>'
+            )
+
+            html += "</div>"
+
+        html += "</div>"
+
+        # Render it via st.markdown so that anchor links (#refN) work on the same page
+        st.markdown(html, unsafe_allow_html=True)
