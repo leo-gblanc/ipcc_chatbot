@@ -232,24 +232,37 @@ def generate_answer(query: str,
 
     # 4) Final LLM generation
     t3 = time.time()
+
+    # Insert a brief “relevance check” instruction so Claude only uses memory if helpful:
+    relevance_check = SystemMessage(content="""
+    Before using the previous conversation, ask yourself:
+    “Is that prior user question and my prior answer directly relevant to this new question?”
+    If it is not, ignore it entirely and answer based only on the current question and the provided context.
+    """)
+
+    # Then keep your existing system instructions exactly as before:
+    existing_system = SystemMessage(content="""
+    You are an expert assistant specialized in climate change impacts, with a focus on economic consequences 
+    such as demand shifts, productivity variations, resource dependencies, and regulatory dynamics.
+
+    Use only the provided context from official IPCC reports and related documents to answer the user's question. 
+    Do not invent information or cite external knowledge.
+
+    When answering:
+    - Provide clear and fact-based explanations.
+    - Focus especially on economic, regulatory, and resource-related aspects if relevant.
+    - Cite specific data points, scenarios, or mechanisms if available in the context.
+    - If the context does not contain a direct answer, briefly mention that a precise answer may not be available.
+
+    Never assume facts outside the given documents, and do not speculate. Be factual, structured, and neutral.
+    """)
+
     msgs = memory_msgs + [
-        SystemMessage(content="""
-        You are an expert assistant specialized in climate change impacts, with a focus on economic consequences 
-        such as demand shifts, productivity variations, resource dependencies, and regulatory dynamics.
-
-        Use only the provided context from official IPCC reports and related documents to answer the user's question. 
-        Do not invent information or cite external knowledge.
-
-        When answering:
-        - Provide clear and fact-based explanations.
-        - Focus especially on economic, regulatory, and resource-related aspects if relevant.
-        - Cite specific data points, scenarios, or mechanisms if available in the context.
-        - If the context does not contain a direct answer, briefly mention that a precise answer may not be available.
-
-        Never assume facts outside the given documents, and do not speculate. Be factual, structured, and neutral.
-        """),
+        relevance_check,
+        existing_system,
         HumanMessage(content=prompt)
     ]
+
     ai_msg = chat_model.invoke(msgs)
     timings["generation"] = time.time() - t3
 

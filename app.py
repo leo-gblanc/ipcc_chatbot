@@ -152,12 +152,21 @@ if question and question.strip():
 for user_msg, bot_msg in st.session_state.chat_history:
 
     def linkify_refs(text):
-        # Turn (1), (2), etc. into clickable anchors
-        return re.sub(
-            r"\((\d+)\)",
-            r'<a href="#ref\1" style="text-decoration:none;color:#0077cc;">(\1)</a>',
-            text,
-        )
+        """
+        Find any '(6)', '(11)', or '(6, 11)', etc. and turn each number into its own clickable anchor.
+        E.g. '(6, 11)' → '<a href="#ref6">(6)</a> <a href="#ref11">(11)</a>'.
+        """
+        def _replace(match):
+            nums = match.group(1).split(",")
+            anchors = []
+            for num in nums:
+                num = num.strip()
+                anchors.append(
+                    f'<a href="#ref{num}" style="text-decoration:none;color:#0077cc;">({num})</a>'
+                )
+            return " ".join(anchors)
+
+        return re.sub(r"\((\d+(?:\s*,\s*\d+)*)\)", _replace, text)
 
     bot_msg_html = linkify_refs(bot_msg)
 
@@ -171,7 +180,7 @@ for user_msg, bot_msg in st.session_state.chat_history:
         unsafe_allow_html=True,
     )
 
-    # Display bot’s response
+    # Display bot’s response (with each reference now its own anchor)
     st.markdown(
         f"""
         <div class="chat-row bot-row">
@@ -244,7 +253,7 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
             unsafe_allow_html=True,
         )
 
-        # Pause briefly so that the user sees each paragraph appear in turn.
+        # Pause briefly so that the user sees each paragraph appear in turn
         time.sleep(0.1)
 
     # Replace the placeholder with the full answer (so chat_history is updated)
