@@ -81,6 +81,7 @@ st.markdown(
     .sources-container {
         display: flex;
         flex-direction: row;
+        flex-wrap: nowrap;            /* ← Prevent any wrapping onto a new line */
         overflow-x: auto;
         overflow-y: hidden;
         white-space: nowrap;
@@ -93,29 +94,31 @@ st.markdown(
         flex-direction: column;
         justify-content: flex-start;
         width: 320px;
+        min-height: 180px;            /* ← Force fixed card height */
+        max-height: 180px;
+        overflow: hidden;             /* ← Clip any overflow text */
         background: #fff;
         margin-right: 12px;
         padding: 12px;
         border: 1px solid #ccc;
         border-radius: 10px;
-        flex-shrink: 0;
+        flex-shrink: 0;               /* ← Prevent shrinking below 320px */
         font-family: inherit;
         font-size: 14px;
         line-height: 1.3;
-        /* allow card to grow vertically to fit content */
     }
     .source-card-header {
         font-weight: bold;
         margin-bottom: 0.5rem;
     }
     .source-card-snippet {
-        /* let snippet wrap naturally onto multiple lines */
+        /* let snippet wrap normally, but be clipped by parent’s fixed height */
         margin-bottom: 0.5rem;
         white-space: normal;
     }
     .source-card-footer {
         font-size: 13px;
-        margin-top: auto;
+        margin-top: auto;  /* Push footer to bottom of card */
     }
     .source-card a {
         text-decoration: none;
@@ -166,6 +169,7 @@ for user_msg, bot_msg in st.session_state.chat_history:
                 )
             return " ".join(anchors)
 
+        # The regex captures one or more digits, optionally separated by commas
         return re.sub(r"\((\d+(?:\s*,\s*\d+)*)\)", _replace, text)
 
     bot_msg_html = linkify_refs(bot_msg)
@@ -271,6 +275,7 @@ if st.session_state.last_sources:
           .sources-container {
             display: flex;
             flex-direction: row;
+            flex-wrap: nowrap;            /* ← Prevent any wrapping onto a new line */
             overflow-x: auto;
             overflow-y: hidden;
             white-space: nowrap;
@@ -283,6 +288,9 @@ if st.session_state.last_sources:
             flex-direction: column;
             justify-content: flex-start;
             width: 320px;
+            min-height: 180px;       /* ← Force each card to be exactly 180px tall */
+            max-height: 180px;
+            overflow: hidden;        /* ← Clip any text that doesn't fit */
             background: #fff;
             margin-right: 12px;
             padding: 12px;
@@ -299,11 +307,11 @@ if st.session_state.last_sources:
           }
           .source-card-snippet {
             margin-bottom: 0.5rem;
-            white-space: normal;  /* allow wrapping */
+            white-space: normal;  /* allow wrapping inside fixed-height box */
           }
           .source-card-footer {
             font-size: 13px;
-            margin-top: auto;
+            margin-top: auto;  /* push footer to bottom */
           }
           .source-card a {
             text-decoration: none;
