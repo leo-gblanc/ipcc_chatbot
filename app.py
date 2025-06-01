@@ -81,7 +81,6 @@ st.markdown(
     .sources-container {
         display: flex;
         flex-direction: row;
-        flex-wrap: nowrap;            /* Force a single horizontal row */
         overflow-x: auto;
         overflow-y: hidden;
         white-space: nowrap;
@@ -89,14 +88,12 @@ st.markdown(
         background-color: #f0f0f0;
         border-top: 2px solid #ddd;
     }
-
     .source-card {
         display: inline-flex;
         flex-direction: column;
         justify-content: flex-start;
         width: 320px;
-        min-height: 190px;            /* Card height now 190px */
-        max-height: 190px;
+        height: 190px;            /* Fixed overall card height */
         background: #fff;
         margin-right: 12px;
         padding: 12px;
@@ -105,35 +102,22 @@ st.markdown(
         flex-shrink: 0;
         font-family: inherit;
         font-size: 14px;
-        line-height: 1.35;
+        line-height: 1.3;
     }
-
     .source-card-header {
         font-weight: bold;
         margin-bottom: 0.5rem;
     }
-
     .source-card-snippet {
-        height: 115px;                /* Fixed snippet height for scrolling */
-        overflow-y: auto;             /* Vertical scrollbar if needed */
+        flex-grow: 1;
+        overflow-y: auto;         /* Enable vertical scrolling */
         margin-bottom: 0.5rem;
-        white-space: normal;          /* Allow text to wrap naturally */
+        white-space: normal;      /* Allow the text to wrap */
     }
-
-    /* Style the scrollbar a bit (optional) */
-    .source-card-snippet::-webkit-scrollbar {
-        width: 6px;
-    }
-    .source-card-snippet::-webkit-scrollbar-thumb {
-        background-color: rgba(0,0,0,0.2);
-        border-radius: 3px;
-    }
-
     .source-card-footer {
         font-size: 13px;
-        margin-top: auto;             /* Pin footer at the bottom */
+        margin-top: auto;         /* Stick to bottom */
     }
-
     .source-card a {
         text-decoration: none;
         color: #0066cc;
@@ -163,16 +147,15 @@ question = st.chat_input("Ask something about climate reports...")
 if question and question.strip():
     # Reset last_timings so we don’t show stale data
     st.session_state.last_timings = None
-    st.session_state.chat_history.append((question, "..."))  # placeholder
+    st.session_state.chat_history.append((question, "..."))  # Placeholder for streaming
 
 # === Chat display ===
 for user_msg, bot_msg in st.session_state.chat_history:
 
     def linkify_refs(text):
         """
-        Find any “(6)”, “(11)”, or “(6, 11)”, etc. and turn each number
-        into its own clickable anchor. E.g. '(6, 11)' → 
-        '<a href="#ref6">(6)</a> <a href="#ref11">(11)</a>'.
+        Find any '(6)', '(11)', or '(6, 11)', etc., and turn each number into its own clickable anchor.
+        E.g. '(6, 11)' → '<a href="#ref6">(6)</a> <a href="#ref11">(11)</a>'.
         """
         def _replace(match):
             nums = match.group(1).split(",")
@@ -198,7 +181,7 @@ for user_msg, bot_msg in st.session_state.chat_history:
         unsafe_allow_html=True,
     )
 
-    # Display bot’s response (with each ref separately clickable)
+    # Display bot’s response (with each reference now its own anchor)
     st.markdown(
         f"""
         <div class="chat-row bot-row">
@@ -208,7 +191,7 @@ for user_msg, bot_msg in st.session_state.chat_history:
         unsafe_allow_html=True,
     )
 
-# If we have stored timings, render them once as a “timing-bubble”
+# If we have stored timings, render them once as a “timing‐bubble”
 if st.session_state.last_timings is not None:
     t = st.session_state.last_timings
     st.markdown(
@@ -216,9 +199,9 @@ if st.session_state.last_timings is not None:
         <div class="chat-row bot-row">
             <div class="timing-bubble">
                 ⏱ Contextualization: {t.get('contextualization', 0):.2f}s<br>
-                ⏱ Paraphrase Gen:     {t.get('paraphrase_generation', 0):.2f}s<br>
-                ⏱ Retrieval+Rerank:   {t.get('retrieval_and_rerank', 0):.2f}s<br>
-                ⏱ LLM Generation:     {t.get('generation', 0):.2f}s
+                ⏱ Paraphrase Gen: {t.get('paraphrase_generation', 0):.2f}s<br>
+                ⏱ Retrieval+Rerank: {t.get('retrieval_and_rerank', 0):.2f}s<br>
+                ⏱ LLM Generation: {t.get('generation', 0):.2f}s
             </div>
         </div>
         """,
@@ -258,7 +241,7 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
     placeholder = st.empty()
     streamed = ""
     for para in answer_full.split("\n"):
-        # Append this entire paragraph (with its trailing newline)
+        # Append this entire paragraph (with its trailing newline) at once
         streamed += para + "\n"
 
         # Render the partial text inside a chat bubble
@@ -283,13 +266,12 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
 if st.session_state.last_sources:
     # Expander collapsed by default (expanded=False)
     with st.expander("Show Sources", expanded=False):
-        # Build ONE big HTML block (including CSS + cards with scrollable snippets)
+        # Build ONE big HTML block (including CSS + cards with anchors)
         html = """
         <style>
           .sources-container {
             display: flex;
             flex-direction: row;
-            flex-wrap: nowrap;            /* Force single horizontal row */
             overflow-x: auto;
             overflow-y: hidden;
             white-space: nowrap;
@@ -302,8 +284,7 @@ if st.session_state.last_sources:
             flex-direction: column;
             justify-content: flex-start;
             width: 320px;
-            min-height: 190px;  /* Card height now 190px */
-            max-height: 190px;
+            height: 190px;            /* Fixed overall card height */
             background: #fff;
             margin-right: 12px;
             padding: 12px;
@@ -312,28 +293,21 @@ if st.session_state.last_sources:
             flex-shrink: 0;
             font-family: inherit;
             font-size: 14px;
-            line-height: 1.35;
+            line-height: 1.3;
           }
           .source-card-header {
             font-weight: bold;
             margin-bottom: 0.5rem;
           }
           .source-card-snippet {
-            height: 115px;       /* Fixed snippet height for scrolling */
-            overflow-y: auto;    /* Vertical scrollbar if needed */
+            flex-grow: 1;
+            overflow-y: auto;         /* Enables vertical scrolling */
             margin-bottom: 0.5rem;
-            white-space: normal; /* Allow wrapping */
-          }
-          .source-card-snippet::-webkit-scrollbar {
-            width: 6px;
-          }
-          .source-card-snippet::-webkit-scrollbar-thumb {
-            background-color: rgba(0,0,0,0.2);
-            border-radius: 3px;
+            white-space: normal;      /* Allow wrapping */
           }
           .source-card-footer {
             font-size: 13px;
-            margin-top: auto;    /* Pin footer at bottom */
+            margin-top: auto;         /* Stick to bottom */
           }
           .source-card a {
             text-decoration: none;
@@ -353,18 +327,15 @@ if st.session_state.last_sources:
             rel = round((score + 10) * 5, 1)
             ref = chunk.get("reference", f"({i+1})")
 
-            # Create an anchor target called "ref{i+1}"
+            # Each card has an anchor ID "ref{i+1}" so the inline link can jump here
             html += f'<div class="source-card" id="ref{i+1}">'
 
             # Header line
             html += f'<div class="source-card-header">{ref} – {report} – Page {page_number}</div>'
 
-            # Snippet (max ~400 chars), allowing multi‐line scroll
-            raw_text = chunk["text"]
-            truncated = raw_text[:400].replace("\n", " ")
-            if len(raw_text) > 400:
-                truncated = truncated.rstrip() + "…"
-            html += f'<div class="source-card-snippet">{truncated}</div>'
+            # FULL chunk text (no truncation), wrapped under a scrollable snippet box
+            raw_text = chunk["text"].replace("\n", " ")
+            html += f'<div class="source-card-snippet">{raw_text}</div>'
 
             # Footer: relevancy + link
             pdf_url = (
