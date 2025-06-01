@@ -91,9 +91,8 @@ st.markdown(
     .source-card {
         display: inline-flex;
         flex-direction: column;
-        justify-content: space-between;
+        justify-content: flex-start;
         width: 320px;
-        height: 180px;               /* Fixed height */
         background: #fff;
         margin-right: 12px;
         padding: 12px;
@@ -103,19 +102,20 @@ st.markdown(
         font-family: inherit;
         font-size: 14px;
         line-height: 1.3;
-        overflow: hidden;            /* Ensure nothing can escape the box */
+        /* allow card to grow vertically to fit content */
     }
     .source-card-header {
         font-weight: bold;
         margin-bottom: 0.5rem;
     }
     .source-card-snippet {
-        flex-grow: 1;
-        overflow: hidden;            /* Clip excess lines */
+        /* let snippet wrap naturally onto multiple lines */
         margin-bottom: 0.5rem;
+        white-space: normal;
     }
     .source-card-footer {
         font-size: 13px;
+        margin-top: auto;
     }
     .source-card a {
         text-decoration: none;
@@ -209,7 +209,7 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
     for user_msg, bot_msg in st.session_state.chat_history[-3:-1]:
         memory.append({"user": user_msg, "assistant": bot_msg})
 
-    # Wrap generate_answer(...) in a spinner so the user sees “Thinking...”
+    # Call generate_answer() inside a spinner so the user sees “Thinking…”
     with st.spinner("Thinking…"):
         response = generate_answer(
             query=question,
@@ -249,7 +249,8 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
 
 # === Collapsible, horizontally scrollable “Sources” strip ===
 if st.session_state.last_sources:
-    with st.expander("Show Sources", expanded=True):
+    # expander collapsed by default (expanded=False)
+    with st.expander("Show Sources", expanded=False):
         # Build ONE big HTML block (including CSS + cards with anchors)
         html = """
         <style>
@@ -266,9 +267,8 @@ if st.session_state.last_sources:
           .source-card {
             display: inline-flex;
             flex-direction: column;
-            justify-content: space-between;
+            justify-content: flex-start;
             width: 320px;
-            height: 180px;             /* Fixed height */
             background: #fff;
             margin-right: 12px;
             padding: 12px;
@@ -278,19 +278,18 @@ if st.session_state.last_sources:
             font-family: inherit;
             font-size: 14px;
             line-height: 1.3;
-            overflow: hidden;          /* Clip anything outside */
           }
           .source-card-header {
             font-weight: bold;
             margin-bottom: 0.5rem;
           }
           .source-card-snippet {
-            flex-grow: 1;
-            overflow: hidden;          /* Clip excess lines */
             margin-bottom: 0.5rem;
+            white-space: normal;  /* allow wrapping */
           }
           .source-card-footer {
             font-size: 13px;
+            margin-top: auto;
           }
           .source-card a {
             text-decoration: none;
@@ -316,10 +315,10 @@ if st.session_state.last_sources:
             # Header line
             html += f'<div class="source-card-header">{ref} – {report} – Page {page_number}</div>'
 
-            # Snippet (max 250 chars), clipped if too long
+            # Snippet (max ~400 chars), allowing multiple lines
             raw_text = chunk["text"]
-            snippet = raw_text[:250].replace("\n", " ")
-            if len(raw_text) > 250:
+            snippet = raw_text[:400].replace("\n", " ")
+            if len(raw_text) > 400:
                 snippet = snippet.rstrip() + "…"
             html += f'<div class="source-card-snippet">{snippet}</div>'
 
