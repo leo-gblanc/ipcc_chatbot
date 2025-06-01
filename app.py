@@ -20,11 +20,11 @@ if "last_timings" not in st.session_state:
 # --- Set page configuration ---
 st.set_page_config(page_title="IPCC Assistant", page_icon="💬", layout="wide")
 
-# --- Custom CSS for chat-bubbles, timing bubble, and source-cards ---
+# --- Custom CSS for chat‐bubbles, timing bubble, and source‐cards ---
 st.markdown(
     """
     <style>
-    /* ================= Chat-bubble styling ================= */
+    /* ================= Chat‐bubble styling ================= */
     .chat-bubble {
         border-radius: 12px;
         padding: 0.75rem 1rem;
@@ -65,7 +65,7 @@ st.markdown(
         outline: none !important;
     }
 
-    /* ================= Timing-bubble styling ================= */
+    /* ================= Timing‐bubble styling ================= */
     .timing-bubble {
         border-radius: 12px;
         background-color: #f0f0f0;
@@ -81,7 +81,7 @@ st.markdown(
     .sources-container {
         display: flex;
         flex-direction: row;
-        flex-wrap: nowrap;            /* ← Force single horizontal row */
+        flex-wrap: nowrap;            /* Force a single horizontal row */
         overflow-x: auto;
         overflow-y: hidden;
         white-space: nowrap;
@@ -95,9 +95,8 @@ st.markdown(
         flex-direction: column;
         justify-content: flex-start;
         width: 320px;
-        min-height: 200px;            /* ← Increased card height from 180→200 */
-        max-height: 200px;
-        overflow: hidden;             /* ← Clip overflow */
+        min-height: 190px;            /* Card height now 190px */
+        max-height: 190px;
         background: #fff;
         margin-right: 12px;
         padding: 12px;
@@ -115,32 +114,24 @@ st.markdown(
     }
 
     .source-card-snippet {
-        /* Let snippet wrap, but constrain its height so footer always visible */
-        max-height: 120px;        /* ← Increased snippet max-height accordingly */
-        overflow: hidden;         /* ← Clip overflowed snippet text */
+        height: 115px;                /* Fixed snippet height for scrolling */
+        overflow-y: auto;             /* Vertical scrollbar if needed */
         margin-bottom: 0.5rem;
-        white-space: normal;
+        white-space: normal;          /* Allow text to wrap naturally */
     }
 
-    /* The "Show more" details will expand beyond snippet area */
-    .source-card details {
-        margin-top: 0.25rem;
-        font-size: 13px;
+    /* Style the scrollbar a bit (optional) */
+    .source-card-snippet::-webkit-scrollbar {
+        width: 6px;
     }
-    .source-card summary {
-        cursor: pointer;
-        font-weight: bold;
-    }
-
-    .source-card-snippet-full {
-        font-size: 14px;
-        line-height: 1.35;
-        margin-top: 0.5rem;
+    .source-card-snippet::-webkit-scrollbar-thumb {
+        background-color: rgba(0,0,0,0.2);
+        border-radius: 3px;
     }
 
     .source-card-footer {
         font-size: 13px;
-        margin-top: auto;        /* ← Push footer to bottom */
+        margin-top: auto;             /* Pin footer at the bottom */
     }
 
     .source-card a {
@@ -292,13 +283,13 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
 if st.session_state.last_sources:
     # Expander collapsed by default (expanded=False)
     with st.expander("Show Sources", expanded=False):
-        # Build ONE big HTML block (including CSS + cards + <details>)
+        # Build ONE big HTML block (including CSS + cards with scrollable snippets)
         html = """
         <style>
           .sources-container {
             display: flex;
             flex-direction: row;
-            flex-wrap: nowrap;            /* ← Force single horizontal row */
+            flex-wrap: nowrap;            /* Force single horizontal row */
             overflow-x: auto;
             overflow-y: hidden;
             white-space: nowrap;
@@ -311,9 +302,8 @@ if st.session_state.last_sources:
             flex-direction: column;
             justify-content: flex-start;
             width: 320px;
-            min-height: 200px;       /* ← Increased card height */
-            max-height: 200px;
-            overflow: hidden;        /* ← Clip any overflow */
+            min-height: 190px;  /* Card height now 190px */
+            max-height: 190px;
             background: #fff;
             margin-right: 12px;
             padding: 12px;
@@ -329,27 +319,21 @@ if st.session_state.last_sources:
             margin-bottom: 0.5rem;
           }
           .source-card-snippet {
-            max-height: 120px;       /* ← Ensure footer below remains visible */
-            overflow: hidden;        /* ← Clip any extra lines */
+            height: 115px;       /* Fixed snippet height for scrolling */
+            overflow-y: auto;    /* Vertical scrollbar if needed */
             margin-bottom: 0.5rem;
-            white-space: normal;     /* ← Allow wrapping */
+            white-space: normal; /* Allow wrapping */
           }
-          .source-card details {
-            margin-top: 0.25rem;
-            font-size: 13px;
+          .source-card-snippet::-webkit-scrollbar {
+            width: 6px;
           }
-          .source-card summary {
-            cursor: pointer;
-            font-weight: bold;
-          }
-          .source-card-snippet-full {
-            font-size: 14px;
-            line-height: 1.35;
-            margin-top: 0.5rem;
+          .source-card-snippet::-webkit-scrollbar-thumb {
+            background-color: rgba(0,0,0,0.2);
+            border-radius: 3px;
           }
           .source-card-footer {
             font-size: 13px;
-            margin-top: auto;       /* ← Push footer to very bottom */
+            margin-top: auto;    /* Pin footer at bottom */
           }
           .source-card a {
             text-decoration: none;
@@ -375,23 +359,12 @@ if st.session_state.last_sources:
             # Header line
             html += f'<div class="source-card-header">{ref} – {report} – Page {page_number}</div>'
 
-            # Snippet (max ~400 chars), allowing multiple lines up to ~120px
+            # Snippet (max ~400 chars), allowing multi‐line scroll
             raw_text = chunk["text"]
             truncated = raw_text[:400].replace("\n", " ")
             if len(raw_text) > 400:
                 truncated = truncated.rstrip() + "…"
             html += f'<div class="source-card-snippet">{truncated}</div>'
-
-            # If we did truncate, add a <details> so user can “Show more”
-            if len(raw_text) > 400:
-                # Show the full chunk within a details/summary block
-                escaped_full = raw_text.replace("<", "&lt;").replace(">", "&gt;")
-                html += (
-                    '<details>'
-                    '<summary>Show more</summary>'
-                    f'<div class="source-card-snippet-full">{escaped_full}</div>'
-                    '</details>'
-                )
 
             # Footer: relevancy + link
             pdf_url = (
