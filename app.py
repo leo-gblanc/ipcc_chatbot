@@ -227,11 +227,14 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
 
     answer_full = response["answer"]
 
-    # Stream the assistant’s answer word by word
+    # Stream the assistant’s answer paragraph by paragraph
     placeholder = st.empty()
     streamed = ""
-    for word in answer_full.split():
-        streamed += word + " "
+    for para in answer_full.split("\n"):
+        # Append this entire paragraph (with its trailing newline) at once
+        streamed += para + "\n"
+
+        # Render the partial text inside a chat bubble
         placeholder.markdown(
             f"""
             <div class="chat-row bot-row">
@@ -240,7 +243,9 @@ if st.session_state.chat_history and st.session_state.chat_history[-1][1] == "..
             """,
             unsafe_allow_html=True,
         )
-        time.sleep(0.02)
+
+        # Pause briefly so that the user sees each paragraph appear in turn.
+        time.sleep(0.1)
 
     # Replace the placeholder with the full answer (so chat_history is updated)
     st.session_state.chat_history[-1] = (question, answer_full)
