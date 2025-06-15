@@ -19,4 +19,4 @@ DATABRICKS_TOKEN = "dapi-xxxxxxxxxxxxxxxx"
 - `app.py`: Main Streamlit interface
 - `rag_core.py`: Core logic for vector search and answer generation
 - `requirements.txt`: Python dependencies
-- `Notebooks` folder: Databricks notebooks used to create embeddings vectors and development
+- `Notebooks` folder: Databricks notebooks used to create embeddings vectors and development (must be run on a Databricks cluster having required libraries installed)
